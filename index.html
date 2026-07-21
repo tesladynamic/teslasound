@@ -1,159 +1,83 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VoltSound</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VoltSound GPS Test</title>
 
 <style>
 body{
-    background:#000;
-    color:#fff;
-    margin:0;
-    height:100vh;
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
-    align-items:center;
-    font-family:-apple-system,sans-serif;
+background:#000;
+color:#fff;
+font-family:-apple-system,sans-serif;
+text-align:center;
+padding:30px;
 }
+
 #speed{
-    font-size:120px;
-    font-weight:200;
+font-size:100px;
+margin-top:40px;
 }
-#status{
-    margin-top:15px;
-    font-size:16px;
-    opacity:.8;
-    text-align:center;
-    max-width:90%;
+
+#info{
+margin-top:20px;
+font-size:18px;
+line-height:1.6;
 }
 button{
-    margin-top:30px;
-    padding:16px 40px;
-    font-size:22px;
-    border:none;
-    border-radius:12px;
+font-size:24px;
+padding:15px 35px;
 }
 </style>
 </head>
 <body>
 
+<h1>GPS TEST</h1>
+
+<button onclick="startGPS()">START</button>
+
 <div id="speed">0</div>
-<div id="status">Hazır</div>
-<button id="start">START</button>
+
+<div id="info">
+Bekliyor...
+</div>
 
 <script>
 
-let currentAudio = null;
-let currentMode = "";
+function startGPS(){
 
-let lastLat = null;
-let lastLon = null;
-let lastTime = null;
+navigator.geolocation.watchPosition(
 
-const audioFiles = {
-    idle: "idle.wav",
-    cruise: "cruise.wav",
-    sport: "sport.wav",
-    boost: "boost.wav"
-};
+function(pos){
 
-function playMode(mode){
+document.getElementById("speed").innerHTML =
+Math.round(pos.coords.speed || 0);
 
-    if(currentMode === mode) return;
+document.getElementById("info").innerHTML =
+"LAT: " + pos.coords.latitude +
+"<br>LON: " + pos.coords.longitude +
+"<br>ACCURACY: " + pos.coords.accuracy +
+"<br>SPEED: " + pos.coords.speed +
+"<br>TIME: " + new Date().toLocaleTimeString();
 
-    if(currentAudio){
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-    }
+},
 
-    currentAudio = new Audio(audioFiles[mode]);
-    currentAudio.loop = true;
-    currentAudio.play();
+function(err){
 
-    currentMode = mode;
+document.getElementById("info").innerHTML =
+"GPS ERROR: " + err.message;
+
+},
+
+{
+enableHighAccuracy:true,
+maximumAge:0,
+timeout:10000
 }
 
-function distance(lat1, lon1, lat2, lon2){
+);
 
-    const R = 6371000;
-
-    const dLat = (lat2-lat1) * Math.PI/180;
-    const dLon = (lon2-lon1) * Math.PI/180;
-
-    const a =
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1*Math.PI/180) *
-        Math.cos(lat2*Math.PI/180) *
-        Math.sin(dLon/2) *
-        Math.sin(dLon/2);
-
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
-
-document.getElementById("start").onclick = () => {
-
-    playMode("idle");
-
-    navigator.geolocation.watchPosition(
-
-        pos => {
-
-            const lat = pos.coords.latitude;
-            const lon = pos.coords.longitude;
-            const now = Date.now();
-
-            let kmh = 0;
-
-            if(lastLat !== null){
-
-                const meters =
-                    distance(lastLat,lastLon,lat,lon);
-
-                const seconds =
-                    (now-lastTime)/1000;
-
-                if(seconds > 0){
-                    kmh = (meters/seconds)*3.6;
-                }
-            }
-
-            lastLat = lat;
-            lastLon = lon;
-            lastTime = now;
-
-            kmh = Math.round(kmh);
-
-            document.getElementById("speed").innerText = kmh;
-
-            let mode = "idle";
-
-            if(kmh >= 20) mode = "cruise";
-            if(kmh >= 60) mode = "sport";
-            if(kmh >= 120) mode = "boost";
-
-            playMode(mode);
-
-            document.getElementById("status").innerHTML =
-                "Mode: " + mode +
-                "<br>Lat: " + lat.toFixed(5) +
-                "<br>Lon: " + lon.toFixed(5);
-        },
-
-        err => {
-
-            document.getElementById("status").innerText =
-                "GPS Hatası: " + err.message;
-        },
-
-        {
-            enableHighAccuracy:true,
-            maximumAge:0,
-            timeout:10000
-        }
-    );
-};
 
 </script>
 
