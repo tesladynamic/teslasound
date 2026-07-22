@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Balanced Edition</title>
+<title>VoltSound - Perfect Flow Edition</title>
 
 <!-- Google Fonts: Fütüristik / Sci-Fi Tarzı Font (Orbitron) -->
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
@@ -348,12 +348,13 @@ function chooseMode(speed){
     return "boost";
 }
 
+// TÜM GEÇİŞLER (IDLE <-> CRUISE <-> SPORT <-> BOOST) İÇİN KUSURSUZ CROSSFADE
 function switchSoundMode(mode) {
     if(mode === currentMode) return;
     if(!soundBuffers[mode]) return;
 
     const now = audioCtx.currentTime;
-    // Geçiş süresi ne çok hantal ne de ani: ideal bir hızda (0.5 saniye) pürüzsüz erime sağlar
+    // Cruise, Sport ve Boost geçişlerinin hepsinde pürüzsüz 0.5 saniyelik harmanlanma süresi
     const FADE_TIME = 0.5;
 
     let oldSource = activeSource;
@@ -392,7 +393,8 @@ function updateEngine(speed) {
     let rate = 0.80 + (speed / 120);
     rate = Math.max(0.75, Math.min(2.2, rate));
 
-    const smoothingTime = 0.15; // Tepki süresi dengelendi
+    // Geçişlerdeki devir tepki süresini biraz daha esneterek sarsıntıyı tamamen yok ettik
+    const smoothingTime = 0.2; 
     activeSource.playbackRate.setTargetAtTime(rate, audioCtx.currentTime, smoothingTime);
 
     let targetFreq = 400 + (speed * 45);
