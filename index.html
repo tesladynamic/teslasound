@@ -98,7 +98,6 @@ button:hover {
     transform: scale(1.05);
 }
 
-/* Kapatma butonu özel stili (kırmızımsı/turuncu uyarı tonu) */
 button.stop-btn {
     background: #ef4444;
     box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
@@ -125,7 +124,7 @@ button.stop-btn:hover {
         <div class="unit">KM/H</div>
         <div id="status">SİSTEM HAZIR</div>
         <br>
-        <button id="stopBtn" class="stop-btn">SİSTEMİ KAPAT</button>
+        <button id="stopBtn" class="stop-btn">DURDUR</button>
     </div>
 </div>
 
@@ -267,7 +266,6 @@ function updateEngine(speed) {
     previousSpeed = speed;
 }
 
-// MOTORU BAŞLATMA
 document.getElementById("actionBtn").onclick = async () => {
     document.getElementById("actionBtn").innerText = "SİSTEM BAŞLATILIYOR...";
     await loadSounds();
@@ -316,22 +314,18 @@ document.getElementById("actionBtn").onclick = async () => {
     );
 };
 
-// SİSTEMİ KAPATMA
 document.getElementById("stopBtn").onclick = () => {
-    // 1. Sesi durdur
     if(activeSource) {
         try { activeSource.stop(); } catch(e){}
         activeSource = null;
     }
     currentMode = "";
 
-    // 2. GPS takibini durdur
     if(watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
     }
 
-    // 3. Değişkenleri sıfırla
     lastLat = null;
     lastLon = null;
     lastTime = null;
@@ -340,7 +334,6 @@ document.getElementById("stopBtn").onclick = () => {
     currentSpeedForVisual = 0;
     isEngineRunning = false;
 
-    // 4. Arayüzü başa döndür
     document.getElementById("mainContainer").classList.remove("active");
     document.getElementById("actionBtn").style.display = "inline-block";
     document.getElementById("actionBtn").innerText = "MOTORU ÇALIŞTIR";
