@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - On/Off Edition</title>
+<title>VoltSound - Minimal Wave</title>
 
 <style>
 body{
@@ -48,31 +48,14 @@ canvas {
     display: block;
 }
 
-#speed{
-    font-size: 140px;
-    font-weight: 200;
-    line-height: 1;
-    letter-spacing: -2px;
-    color: #38bdf8;
-    text-shadow: 0 0 30px rgba(56, 189, 248, 0.7);
-}
-
-.unit {
-    font-size: 20px;
-    opacity: 0.5;
-    margin-top: 5px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-}
-
 #status{
-    margin-top: 20px;
-    padding: 8px 20px;
+    margin-bottom: 20px;
+    padding: 10px 24px;
     background: rgba(56, 189, 248, 0.15);
     color: #38bdf8;
     border-radius: 20px;
     display: inline-block;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 600;
     letter-spacing: 1.5px;
     box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
@@ -101,7 +84,7 @@ button:hover {
 button.stop-btn {
     background: #ef4444;
     box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
-    margin-top: 25px;
+    margin-top: 10px;
     color: #fff;
     font-size: 16px;
     padding: 12px 30px;
@@ -117,11 +100,9 @@ button.stop-btn:hover {
 <canvas id="waveCanvas"></canvas>
 
 <div class="container" id="mainContainer">
-    <button id="actionBtn">BAŞLAT</button>
+    <button id="actionBtn">MOTORU ÇALIŞTIR</button>
     
     <div class="metric-box" id="metricBox">
-        <div id="speed">0</div>
-        <div class="unit">KM/H</div>
         <div id="status">SİSTEM HAZIR</div>
         <br>
         <button id="stopBtn" class="stop-btn">DURDUR</button>
@@ -299,8 +280,6 @@ document.getElementById("actionBtn").onclick = async () => {
 
             currentSpeedForVisual = speed;
 
-            document.getElementById("speed").innerText = speed;
-
             const mode = chooseMode(speed);
             switchSoundMode(mode);
             updateEngine(speed);
@@ -337,7 +316,6 @@ document.getElementById("stopBtn").onclick = () => {
     document.getElementById("mainContainer").classList.remove("active");
     document.getElementById("actionBtn").style.display = "inline-block";
     document.getElementById("actionBtn").innerText = "MOTORU ÇALIŞTIR";
-    document.getElementById("speed").innerText = "0";
     document.getElementById("status").innerText = "SİSTEM HAZIR";
 };
 </script>
