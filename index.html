@@ -46,7 +46,6 @@ canvas {
     align-items: center;
 }
 
-/* Tüm ekran panelleri / buton grupları için ortak geçiş alanı */
 .panel {
     position: absolute;
     width: 100%;
@@ -56,7 +55,6 @@ canvas {
     transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
-/* Aktif olmayan paneller gizlenir ve tıklanamaz */
 .panel.hidden {
     opacity: 0;
     transform: scale(0.95);
@@ -114,12 +112,10 @@ button.stop-btn:hover {
 <canvas id="waveCanvas"></canvas>
 
 <div class="container" id="mainContainer">
-    <!-- Başlangıç Paneli -->
     <div id="startPanel" class="panel">
         <button id="actionBtn">BAŞLAT</button>
     </div>
     
-    <!-- Sürüş / Kontrol Paneli -->
     <div id="metricPanel" class="panel hidden">
         <div id="status">SİSTEM HAZIR</div>
         <button id="stopBtn" class="stop-btn">DURDUR</button>
@@ -275,7 +271,6 @@ function updateEngine(speed) {
     previousSpeed = speed;
 }
 
-// BAŞLAT
 document.getElementById("actionBtn").onclick = async () => {
     document.getElementById("actionBtn").innerText = "BAŞLATILIYOR...";
     await loadSounds();
@@ -286,7 +281,6 @@ document.getElementById("actionBtn").onclick = async () => {
 
     switchSoundMode("idle");
 
-    // Butonlar arası pürüzsüz panel geçişi (Slide / Fade)
     document.getElementById("startPanel").classList.add("hidden");
     document.getElementById("metricPanel").classList.remove("hidden");
     isEngineRunning = true;
@@ -323,11 +317,9 @@ document.getElementById("actionBtn").onclick = async () => {
     );
 };
 
-// DURDUR
 document.getElementById("stopBtn").onclick = () => {
     if(!audioCtx) return;
 
-    // Sesi yumuşakça kapat
     if(activeGain) {
         try {
             activeGain.gain.setValueAtTime(activeGain.gain.value, audioCtx.currentTime);
@@ -335,11 +327,11 @@ document.getElementById("stopBtn").onclick = () => {
         } catch(e){}
     }
 
-    // Panel geçişini hemen başlat (DURDUR paneli solup BAŞLAT paneli yerine süzülerek gelsin)
+    // Panelleri hemen değiştir ve buton yazısını anında BAŞLAT yap
     document.getElementById("metricPanel").classList.add("hidden");
     document.getElementById("startPanel").classList.remove("hidden");
+    document.getElementById("actionBtn").innerText = "BAŞLAT";
 
-    // Ses ve GPS verilerini kapanış animasyonu bitince tamamen sıfırla
     setTimeout(() => {
         if(activeSource) {
             try { activeSource.stop(); } catch(e){}
@@ -361,7 +353,6 @@ document.getElementById("stopBtn").onclick = () => {
         currentSpeedForVisual = 0;
         isEngineRunning = false;
 
-        document.getElementById("actionBtn").innerText = "BAŞLAT";
         document.getElementById("status").innerText = "SİSTEM HAZIR";
     }, 550);
 };
