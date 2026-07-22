@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Ultimate Fluid Edition</title>
+<title>VoltSound - Organic Start Edition</title>
 
 <!-- Google Fonts: Fütüristik / Sci-Fi Tarzı Font (Orbitron) -->
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
@@ -92,7 +92,6 @@ canvas {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    /* Geçiş süresi ve yumuşaklığı artırıldı */
     transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease;
 }
 
@@ -135,7 +134,6 @@ canvas {
     transition: opacity 0.6s ease 0.2s, transform 0.6s ease 0.2s;
 }
 
-/* Panel içeri girince status yazısı da yumuşakça yukarı süzülerek gelsin */
 #metricPanel.zoom-in #status {
     opacity: 1;
     transform: translateY(0);
@@ -209,7 +207,7 @@ const ctx = canvas.getContext("2d");
 let currentSpeedForVisual = 0;
 let waveAngle = 0;
 let isEngineRunning = false;
-let waveDecayFactor = 1.0;
+let waveScaleFactor = 0.0; // Dalgaların büyüme katsayısı (0'dan başlayıp 1'e çıkacak)
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -230,13 +228,14 @@ function animateWaves() {
 
     for (let w = 0; w < 3; w++) {
         ctx.beginPath();
-        const alpha = (isEngineRunning || waveDecayFactor > 0.01) ? ((0.25 + (w * 0.15)) * waveDecayFactor + 0.08 * (1 - waveDecayFactor)) : 0.08;
+        const alpha = 0.08 + ((0.25 + (w * 0.15)) * waveScaleFactor);
         ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
         
         for (let x = 0; x < canvas.width; x += 10) {
             const frequency = 0.005 + (speedFactor * 0.00015);
             const baseAmplitude = (isEngineRunning ? 40 : 15) + (speedFactor * 1.2);
-            const amplitude = baseAmplitude * waveDecayFactor;
+            // Genlik başlangıçta küçük başlar, scale faktörü ile normal boyutuna ulaşır
+            const amplitude = baseAmplitude * waveScaleFactor;
             
             const y = cy + Math.sin(x * frequency + waveAngle + (w * 0.6)) * amplitude 
                       * Math.cos(waveAngle * 0.4);
@@ -358,7 +357,6 @@ document.getElementById("actionBtn").onclick = async () => {
     const btn = document.getElementById("actionBtn");
     btn.innerText = "BAŞLATILIYOR...";
     
-    // Sesler arka planda yüklenirken arayüz hemen yumuşak geçişe başlasın
     document.getElementById("startPanel").classList.add("zoom-out");
     document.getElementById("metricPanel").classList.add("zoom-in");
 
@@ -371,7 +369,16 @@ document.getElementById("actionBtn").onclick = async () => {
     switchSoundMode("idle");
     
     isEngineRunning = true;
-    waveDecayFactor = 1.0;
+
+    // DALGALARI KÜÇÜKTEN BÜYÜĞE DOĞRU AÇ (Fade-In / Grow Effect)
+    waveScaleFactor = 0.0;
+    const growInterval = setInterval(() => {
+        waveScaleFactor += 0.05;
+        if (waveScaleFactor >= 1.0) {
+            waveScaleFactor = 1.0;
+            clearInterval(growInterval);
+        }
+    }, 25);
 
     watchId = navigator.geolocation.watchPosition(
         pos => {
@@ -419,10 +426,11 @@ document.getElementById("stopBtn").onclick = () => {
     document.getElementById("startPanel").classList.remove("zoom-out");
     document.getElementById("actionBtn").innerText = "BAŞLAT";
 
+    // DALGALARI YAVAŞÇA KÜÇÜLTEREK SÖNDÜR
     const decayInterval = setInterval(() => {
-        waveDecayFactor -= 0.04;
-        if (waveDecayFactor <= 0) {
-            waveDecayFactor = 0;
+        waveScaleFactor -= 0.05;
+        if (waveScaleFactor <= 0) {
+            waveScaleFactor = 0;
             clearInterval(decayInterval);
         }
     }, 20);
