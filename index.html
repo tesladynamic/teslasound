@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Touch Throttle Edition</title>
+<title>VoltSound - Ultra Smooth Edition</title>
 
 <!-- Google Fonts: Fütüristik / Sci-Fi Tarzı Font (Orbitron) -->
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
@@ -20,7 +20,7 @@ body{
     align-items:center;
     height:100vh;
     overflow:hidden;
-    touch-action: none; /* Sayfanın kaymasını engeller */
+    touch-action: none;
 }
 
 canvas {
@@ -161,11 +161,9 @@ button:hover {
     transform: scale(1.05);
 }
 
-/* Sıvı Cam Durdur Butonu */
 button.stop-btn {
     background: rgba(185, 28, 28, 0.25);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(239, 68, 68, 0.4);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37), inset 0 1px 1px rgba(255, 255, 255, 0.2);
     color: #fca5a5;
@@ -181,7 +179,6 @@ button.stop-btn:hover {
     transform: scale(1.05);
 }
 
-/* SAĞ KENAR: Dokunmatik Gaz Pedalı / Throttle Bar */
 .throttle-bar {
     position: fixed;
     right: 30px;
@@ -193,68 +190,37 @@ button.stop-btn:hover {
     border: 1px solid rgba(56, 189, 248, 0.25);
     border-radius: 12px;
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     z-index: 10;
     cursor: pointer;
     overflow: hidden;
-    display: none; /* Sistem çalışınca aktif olacak */
+    display: none;
 }
-
-.throttle-bar.active {
-    display: block;
-}
-
+.throttle-bar.active { display: block; }
 .throttle-fill {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 0%;
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 0%;
     background: linear-gradient(to top, rgba(56, 189, 248, 0.4), rgba(56, 189, 248, 0.9));
-    box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
     border-radius: 0 0 12px 12px;
     transition: height 0.05s linear;
 }
-
 .throttle-thumb {
-    position: absolute;
-    bottom: 0%;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 36px;
-    height: 18px;
-    background: #38bdf8;
-    border-radius: 9px;
+    position: absolute; bottom: 0%; left: 50%; transform: translateX(-50%);
+    width: 36px; height: 18px; background: #38bdf8; border-radius: 9px;
     box-shadow: 0 0 15px rgba(56, 189, 248, 0.8);
     pointer-events: none;
     transition: bottom 0.05s linear;
 }
-
 .throttle-label {
-    position: fixed;
-    right: 20px;
-    top: calc(50% - 135px);
-    font-size: 9px;
-    color: rgba(56, 189, 248, 0.7);
-    letter-spacing: 1px;
-    text-align: center;
-    width: 45px;
-    z-index: 10;
-    display: none;
+    position: fixed; right: 20px; top: calc(50% - 135px);
+    font-size: 9px; color: rgba(56, 189, 248, 0.7); letter-spacing: 1px;
+    text-align: center; width: 45px; z-index: 10; display: none;
 }
-.throttle-label.active {
-    display: block;
-}
+.throttle-label.active { display: block; }
 </style>
 </head>
 <body>
 
 <canvas id="waveCanvas"></canvas>
-
-<!-- Ekran Altı Kuzey Işıkları Efekti -->
 <div class="aurora-glow"></div>
-
-<!-- Sağ Kenar Gaz Pedalı Arayüzü -->
 <div id="throttleLabel" class="throttle-label">GAZ</div>
 <div id="throttleBar" class="throttle-bar">
     <div id="throttleFill" class="throttle-fill"></div>
@@ -282,7 +248,7 @@ let currentSpeedForVisual = 0;
 let waveAngle = 0;
 let isEngineRunning = false;
 let waveScaleFactor = 0.0;
-let throttleValue = 0.0; // 0.0 ile 1.0 arası gaz seviyesi
+let throttleValue = 0.0; 
 let isDraggingThrottle = false;
 
 function resizeCanvas() {
@@ -337,7 +303,6 @@ let lastLat = null;
 let lastLon = null;
 let lastTime = null;
 let smoothedSpeed = 0;
-let previousSpeed = 0;
 
 const files = {
     idle: "idle.wav",
@@ -383,16 +348,24 @@ function chooseMode(speed){
     return "boost";
 }
 
+// SESLER ARASI YUMUŞAK GEÇİŞ (CROSSFADE)
 function switchSoundMode(mode) {
     if(mode === currentMode) return;
     if(!soundBuffers[mode]) return;
 
-    if(activeSource && activeGain) {
+    const now = audioCtx.currentTime;
+    const FADE_TIME = 0.5; // Seslerin birbiri içinde erimesi için yarım saniye
+
+    let oldSource = activeSource;
+    let oldGain = activeGain;
+
+    if(oldSource && oldGain) {
         try {
-            activeGain.gain.setValueAtTime(activeGain.gain.value, audioCtx.currentTime);
-            activeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.15);
-            let oldSource = activeSource;
-            setTimeout(() => { try { oldSource.stop(); } catch(e){} }, 200);
+            oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+            oldGain.gain.linearRampToValueAtTime(0, now + FADE_TIME);
+            setTimeout(() => {
+                try { oldSource.stop(); } catch(e){}
+            }, (FADE_TIME + 0.1) * 1000);
         } catch(e){}
     }
 
@@ -401,12 +374,12 @@ function switchSoundMode(mode) {
     source.loop = true;
 
     const gainNode = audioCtx.createGain();
-    gainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(1.0, audioCtx.currentTime + 0.15);
+    gainNode.gain.setValueAtTime(0.01, now);
+    gainNode.gain.linearRampToValueAtTime(1.0, now + FADE_TIME);
 
     source.connect(gainNode);
     gainNode.connect(biquadFilter);
-    source.start(0);
+    source.start(now);
 
     activeSource = source;
     activeGain = gainNode;
@@ -419,16 +392,15 @@ function updateEngine(speed) {
     let rate = 0.80 + (speed / 120);
     rate = Math.max(0.75, Math.min(2.2, rate));
 
-    activeSource.playbackRate.setValueAtTime(rate, audioCtx.currentTime);
+    // Perde (devir) değişimini aniden değil, yumuşak geçişle uygula
+    activeSource.playbackRate.setTargetAtTime(rate, audioCtx.currentTime, 0.15);
 
     let targetFreq = 400 + (speed * 45);
     targetFreq = Math.max(400, Math.min(9000, targetFreq));
-    biquadFilter.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.1);
-
-    previousSpeed = speed;
+    biquadFilter.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.15);
 }
 
-// GAZ PEDALI (THROTTLE) KONTROL MANTIĞI
+// GAZ KONTROLÜ
 const throttleBar = document.getElementById("throttleBar");
 const throttleFill = document.getElementById("throttleFill");
 const throttleThumb = document.getElementById("throttleThumb");
@@ -441,7 +413,7 @@ function updateThrottlePosition() {
 
 function handleThrottleMove(clientY) {
     const rect = throttleBar.getBoundingClientRect();
-    let y = rect.bottom - clientY; // Alttan yukarıya mesafe
+    let y = rect.bottom - clientY;
     let val = y / rect.height;
     if (val < 0) val = 0;
     if (val > 1) val = 1;
@@ -484,10 +456,9 @@ document.getElementById("actionBtn").onclick = async () => {
         }
     }, 25);
 
-    // GPS Takibi (Gerçek Sürüş İçin)
     watchId = navigator.geolocation.watchPosition(
         pos => {
-            if(isDraggingThrottle || throttleValue > 0) return; // Gaz basılıyken GPS ezip simülasyonu uygular
+            if(isDraggingThrottle || throttleValue > 0) return;
             const lat = pos.coords.latitude;
             const lon = pos.coords.longitude;
             const now = Date.now();
@@ -517,16 +488,15 @@ document.getElementById("actionBtn").onclick = async () => {
     );
 };
 
-// Gaz Simülasyon Döngüsü (Parmağını çekince gaz otomatik sıfırlanır / yaylanır)
 function runThrottleLoop() {
     if(isEngineRunning) {
         if(!isDraggingThrottle && throttleValue > 0) {
-            throttleValue -= 0.03; // Bırakınca yavaşça gaz kesilir
+            throttleValue -= 0.03;
             if(throttleValue < 0) throttleValue = 0;
             updateThrottlePosition();
         }
 
-        let targetSpeed = throttleValue * 200; // Tam gaz 200 KM/H
+        let targetSpeed = throttleValue * 200;
         
         if(throttleValue > 0 || isDraggingThrottle) {
             smoothedSpeed += (targetSpeed - smoothedSpeed) * 0.15;
@@ -588,7 +558,6 @@ document.getElementById("stopBtn").onclick = () => {
         lastLon = null;
         lastTime = null;
         smoothedSpeed = 0;
-        previousSpeed = 0;
         currentSpeedForVisual = 0;
         isEngineRunning = false;
 
