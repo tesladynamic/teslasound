@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - 3D Cinematic Transition</title>
+<title>VoltSound - Zoom Transition</title>
 
 <style>
 body{
@@ -44,7 +44,6 @@ canvas {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    perspective: 1000px; /* 3D derinlik hissi için kritik nokta */
     overflow: hidden;
 }
 
@@ -55,10 +54,9 @@ canvas {
     display: flex;
     align-items: center;
     justify-content: center;
-    transform-style: preserve-3d;
 }
 
-/* 3D Panel Ayarları */
+/* Zoom Geçişli Paneller */
 .panel {
     position: absolute;
     width: 100%;
@@ -66,33 +64,32 @@ canvas {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
-    backface-visibility: hidden;
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
 }
 
 /* Başlangıç Paneli Aktif */
 #startPanel {
-    transform: rotateY(0deg) translateZ(0px);
+    transform: scale(1);
     opacity: 1;
 }
 
-/* Başlangıç Paneli Gizlenirken Arkaya Doğru Döner ve Küçülür */
-#startPanel.panel-3d-out {
-    transform: rotateY(-90deg) translateZ(-50px);
+/* Başlat Paneli Gizlenirken Zoom-Out (küçülerek kaybolur) */
+#startPanel.zoom-out {
+    transform: scale(0.6);
     opacity: 0;
     pointer-events: none;
 }
 
-/* Kontrol Paneli Gizliyken Sağda ve Arkada Bekler */
+/* Kontrol Paneli Gizliyken Büyük Başlar (Zoom-In efekti için) */
 #metricPanel {
-    transform: rotateY(90deg) translateZ(-50px);
+    transform: scale(1.4);
     opacity: 0;
     pointer-events: none;
 }
 
-/* Kontrol Paneli Aktif Olurken Öne Doğru Döner */
-#metricPanel.panel-3d-in {
-    transform: rotateY(0deg) translateZ(0px);
+/* Kontrol Paneli Aktif Olurken Normal Boyuta Gelir */
+#metricPanel.zoom-in {
+    transform: scale(1);
     opacity: 1;
     pointer-events: auto;
 }
@@ -319,9 +316,9 @@ document.getElementById("actionBtn").onclick = async () => {
 
     switchSoundMode("idle");
 
-    // 3D DÖNÜŞ EFEKTİ: BAŞLAT paneli arkaya doğru dönerken, DURDUR paneli öne doğru döner
-    document.getElementById("startPanel").classList.add("panel-3d-out");
-    document.getElementById("metricPanel").classList.add("panel-3d-in");
+    // ZOOM EFEKTİ: Başlat paneli küçülerek uzaklaşır, durdur paneli zoom yaparak içeri girer
+    document.getElementById("startPanel").classList.add("zoom-out");
+    document.getElementById("metricPanel").classList.add("zoom-in");
     
     isEngineRunning = true;
 
@@ -367,9 +364,9 @@ document.getElementById("stopBtn").onclick = () => {
         } catch(e){}
     }
 
-    // 3D DÖNÜŞ EFEKTİ: DURDUR paneli dönerken, BAŞLAT paneli yerine geri döner
-    document.getElementById("metricPanel").classList.remove("panel-3d-in");
-    document.getElementById("startPanel").classList.remove("panel-3d-out");
+    // ZOOM EFEKTİ: Durdur paneli zoom-out ile küçülür, başlat paneli yerine geri zoom yapar
+    document.getElementById("metricPanel").classList.remove("zoom-in");
+    document.getElementById("startPanel").classList.remove("zoom-out");
     document.getElementById("actionBtn").innerText = "BAŞLAT";
 
     setTimeout(() => {
