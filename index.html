@@ -1,211 +1,229 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+
 <title>VoltSound</title>
 
 <style>
 body{
-background:#000;
-color:#fff;
-font-family:-apple-system,sans-serif;
-text-align:center;
-padding:30px;
+    background:#000;
+    color:#fff;
+    font-family:-apple-system,sans-serif;
+    margin:0;
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
 }
 
 #speed{
-font-size:100px;
-margin-top:40px;
+    font-size:120px;
+    font-weight:200;
 }
 
-#info{
-margin-top:20px;
-font-size:18px;
-line-height:1.6;
+#status{
+    margin-top:10px;
+    opacity:.75;
 }
 
 button{
-font-size:24px;
-padding:15px 35px;
+    margin-top:30px;
+    padding:16px 40px;
+    border:none;
+    border-radius:12px;
+    font-size:22px;
 }
 </style>
 </head>
-
 <body>
 
-<h1>VOLTSOUND</h1>
-
-<button onclick="startGPS()">START</button>
-
 <div id="speed">0</div>
+<div id="status">Hazır</div>
 
-<div id="info">
-Bekliyor...
-</div>
-
-
-<audio id="engineA" loop></audio>
-<audio id="engineB" loop></audio>
-
+<button id="startBtn">START</button>
 
 <script>
 
-let engineA = document.getElementById("engineA");
-let engineB = document.getElementById("engineB");
+let currentAudio = null;
+let currentMode = "";
 
-let active = engineA;
-let standby = engineB;
+let lastLat = null;
+let lastLon = null;
+let lastTime = null;
 
-let currentSound = "";
+let previousKmh = 0;
 
-let smoothSpeed = 0;
+const audioFiles = {
+    idle: "idle.wav",
+    cruise: "cruise.wav",
+    sport: "sport.wav",
+    boost: "boost.wav"
+};
 
+function playMode(mode){
 
-function fadeTo(file){
+    if(currentMode === mode) return;
 
-if(currentSound === file) return;
+    if(currentAudio){
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+    }
 
-currentSound = file;
+    currentAudio = new Audio(audioFiles[mode]);
 
+    currentAudio.loop = true;
+    currentAudio.volume = 0.75;
 
-// yeni sesi hazırla
+    currentAudio.play();
 
-standby.src = file;
-standby.volume = 0;
-
-standby.play();
-
-
-// crossfade
-
-let step = 0.05;
-
-let fade = setInterval(()=>{
-
-if(standby.volume < 1){
-standby.volume += step;
+    currentMode = mode;
 }
 
-if(active.volume > 0){
-active.volume -= step;
+function distance(lat1, lon1, lat2, lon2){
+
+    const R = 6371000;
+
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+
+    const a =
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1*Math.PI/180) *
+        Math.cos(lat2*Math.PI/180) *
+        Math.sin(dLon/2) *
+        Math.sin(dLon/2);
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+function updateSound(kmh){
 
-if(standby.volume >= 1){
+    if(!currentAudio) return;
 
-active.pause();
-active.currentTime = 0;
+    let accel = kmh - previousKmh;
 
-let temp = active;
-active = standby;
-standby = temp;
+    let pitch = 1;
 
-clearInterval(fade);
+    if(currentMode === "idle"){
+        pitch = 0.85 + (kmh / 20) * 0.40;
+    }
 
+    if(currentMode === "cruise"){
+        pitch = 0.95 + ((kmh-20)/40) * 0.45;
+    }
+
+    if(currentMode === "sport"){
+        pitch = 1.10 + ((kmh-60)/60) * 0.50;
+    }
+
+    if(currentMode === "boost"){
+        pitch = 1.35 + ((kmh-120)/80) * 0.35;
+    }
+
+    if(accel > 1){
+        pitch += 0.08;
+    }
+
+    if(accel < -1){
+        pitch -= 0.08;
+    }
+
+    pitch = Math.max(0.8, Math.min(2.0, pitch));
+
+    currentAudio.playbackRate = pitch;
+
+    let volume = 0.65;
+
+    if(accel > 1){
+        volume += 0.10;
+    }
+
+    if(accel < -1){
+        volume -= 0.10;
+    }
+
+    volume = Math.max(0.35, Math.min(1.0, volume));
+
+    currentAudio.volume +=
+        (volume - currentAudio.volume) * 0.15;
+
+    previousKmh = kmh;
 }
 
-},50);
+document.getElementById("startBtn").onclick = () => {
 
-}
+    playMode("idle");
 
+    navigator.geolocation.watchPosition(
 
+        pos => {
 
-function startGPS(){
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            const now = Date.now();
 
-fadeTo("idle.wav");
+            let kmh = 0;
 
+            if(lastLat !== null){
 
-navigator.geolocation.watchPosition(
+                const meters =
+                    distance(
+                        lastLat,
+                        lastLon,
+                        lat,
+                        lon
+                    );
 
-function(pos){
+                const seconds =
+                    (now-lastTime)/1000;
 
+                if(seconds > 0){
+                    kmh =
+                        (meters/seconds) * 3.6;
+                }
+            }
 
-let gpsSpeed = pos.coords.speed || 0;
+            lastLat = lat;
+            lastLon = lon;
+            lastTime = now;
 
+            kmh = Math.round(kmh);
 
-// m/s -> km/h
+            document.getElementById("speed").innerText =
+                kmh;
 
-let speed = gpsSpeed * 3.6;
+            let mode = "idle";
 
+            if(kmh >= 20) mode = "cruise";
+            if(kmh >= 60) mode = "sport";
+            if(kmh >= 120) mode = "boost";
 
-// yumuşatma
+            playMode(mode);
 
-smoothSpeed =
-smoothSpeed + (speed - smoothSpeed)*0.15;
+            updateSound(kmh);
 
+            document.getElementById("status").innerText =
+                mode.toUpperCase();
 
-speed = smoothSpeed;
+        },
 
+        err => {
 
+            document.getElementById("status").innerText =
+                "GPS ERROR";
+        },
 
-document.getElementById("speed").innerHTML =
-Math.round(speed);
+        {
+            enableHighAccuracy:true,
+            maximumAge:0
+        }
 
+    );
 
-
-let target;
-
-
-// geçiş toleransı
-
-if(speed < 15){
-
-target="idle.wav";
-
-}
-else if(speed < 55){
-
-target="cruise.wav";
-
-}
-else if(speed < 105){
-
-target="sport.wav";
-
-}
-else{
-
-target="boost.wav";
-
-}
-
-
-fadeTo(target);
-
-
-// devir hissi
-
-active.playbackRate =
-Math.min(2,0.8 + speed/150);
-
-
-
-document.getElementById("info").innerHTML =
-"SPEED: "+Math.round(speed)+
-"<br>GPS RAW: "+pos.coords.speed;
-
-
-},
-
-
-function(err){
-
-document.getElementById("info").innerHTML =
-"GPS ERROR: "+err.message;
-
-},
-
-
-{
-enableHighAccuracy:true,
-maximumAge:0,
-timeout:10000
-}
-
-);
-
-}
+};
 
 </script>
 
