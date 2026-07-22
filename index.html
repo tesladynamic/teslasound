@@ -100,7 +100,7 @@ button.stop-btn:hover {
 <canvas id="waveCanvas"></canvas>
 
 <div class="container" id="mainContainer">
-    <button id="actionBtn">MOTORU ÇALIŞTIR</button>
+    <button id="actionBtn">BAŞLAT</button>
     
     <div class="metric-box" id="metricBox">
         <div id="status">SİSTEM HAZIR</div>
@@ -248,7 +248,7 @@ function updateEngine(speed) {
 }
 
 document.getElementById("actionBtn").onclick = async () => {
-    document.getElementById("actionBtn").innerText = "SİSTEM BAŞLATILIYOR...";
+    document.getElementById("actionBtn").innerText = "BAŞLATILIYOR...";
     await loadSounds();
     
     if(audioCtx.state === 'suspended') {
@@ -315,7 +315,7 @@ document.getElementById("stopBtn").onclick = () => {
 
     document.getElementById("mainContainer").classList.remove("active");
     document.getElementById("actionBtn").style.display = "inline-block";
-    document.getElementById("actionBtn").innerText = "MOTORU ÇALIŞTIR";
+    document.getElementById("actionBtn").innerText = "BAŞLAT";
     document.getElementById("status").innerText = "SİSTEM HAZIR";
 };
 </script>
