@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Smooth Transition</title>
+<title>VoltSound - Slide Transition</title>
 
 <style>
 body{
@@ -44,21 +44,54 @@ canvas {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    overflow: hidden; /* Dışarı kayan kısımlar gizlenir */
 }
 
+/* Panel geçişlerinin ana konteyneri */
+.slider-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+/* Paneller yan yana veya üst üste kayma için konumlandırılır */
 .panel {
     position: absolute;
     width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: opacity 0.4s ease, transform 0.4s ease;
+    justify-content: center;
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
 }
 
-.panel.hidden {
+/* Başlangıç paneli aktifken merkezde */
+#startPanel {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+/* Başlangıç paneli gizlenirken sola kayar ve kaybolur */
+#startPanel.slide-out {
+    transform: translateX(-100px);
     opacity: 0;
-    transform: scale(0.95);
     pointer-events: none;
+}
+
+/* Kontrol paneli gizliyken sağda bekler */
+#metricPanel {
+    transform: translateX(100px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Kontrol paneli aktif olurken sağdan merkeze kayar */
+#metricPanel.slide-in {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
 }
 
 #status{
@@ -112,13 +145,15 @@ button.stop-btn:hover {
 <canvas id="waveCanvas"></canvas>
 
 <div class="container" id="mainContainer">
-    <div id="startPanel" class="panel">
-        <button id="actionBtn">BAŞLAT</button>
-    </div>
-    
-    <div id="metricPanel" class="panel hidden">
-        <div id="status">SİSTEM HAZIR</div>
-        <button id="stopBtn" class="stop-btn">DURDUR</button>
+    <div class="slider-wrapper">
+        <div id="startPanel" class="panel">
+            <button id="actionBtn">BAŞLAT</button>
+        </div>
+        
+        <div id="metricPanel" class="panel">
+            <div id="status">SİSTEM HAZIR</div>
+            <button id="stopBtn" class="stop-btn">DURDUR</button>
+        </div>
     </div>
 </div>
 
@@ -281,8 +316,10 @@ document.getElementById("actionBtn").onclick = async () => {
 
     switchSoundMode("idle");
 
-    document.getElementById("startPanel").classList.add("hidden");
-    document.getElementById("metricPanel").classList.remove("hidden");
+    // SLIDE EFEKTİ: BAŞLAT paneli sola kayıp kaybolur, DURDUR paneli sağdan merkeze kayarak gelir
+    document.getElementById("startPanel").classList.add("slide-out");
+    document.getElementById("metricPanel").classList.add("slide-in");
+    
     isEngineRunning = true;
 
     watchId = navigator.geolocation.watchPosition(
@@ -327,9 +364,9 @@ document.getElementById("stopBtn").onclick = () => {
         } catch(e){}
     }
 
-    // Panelleri hemen değiştir ve buton yazısını anında BAŞLAT yap
-    document.getElementById("metricPanel").classList.add("hidden");
-    document.getElementById("startPanel").classList.remove("hidden");
+    // SLIDE EFEKTİ: DURDUR paneli kayarak gider, BAŞLAT paneli yerine geri gelir
+    document.getElementById("metricPanel").classList.remove("slide-in");
+    document.getElementById("startPanel").classList.remove("slide-out");
     document.getElementById("actionBtn").innerText = "BAŞLAT";
 
     setTimeout(() => {
