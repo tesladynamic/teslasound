@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Demo Simulation Edition</title>
+<title>VoltSound - Touch Throttle Edition</title>
 
 <!-- Google Fonts: Fütüristik / Sci-Fi Tarzı Font (Orbitron) -->
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
@@ -20,6 +20,7 @@ body{
     align-items:center;
     height:100vh;
     overflow:hidden;
+    touch-action: none; /* Sayfanın kaymasını engeller */
 }
 
 canvas {
@@ -31,7 +32,7 @@ canvas {
     z-index: -1;
 }
 
-/* Ekranın altındaki Grok tarzı Kuzey Işıkları (Aurora Gradient) Efekti */
+/* Ekranın altındaki Grok tarzı Kuzey Işıkları Efekti */
 .aurora-glow {
     position: fixed;
     bottom: -100px;
@@ -180,33 +181,69 @@ button.stop-btn:hover {
     transform: scale(1.05);
 }
 
-/* Sağ Üst Köşedeki Demo Test Etme Butonu */
-.demo-btn {
+/* SAĞ KENAR: Dokunmatik Gaz Pedalı / Throttle Bar */
+.throttle-bar {
     position: fixed;
-    top: 25px;
-    right: 25px;
-    background: rgba(56, 189, 248, 0.15);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(56, 189, 248, 0.4);
-    color: #38bdf8;
-    padding: 10px 20px;
+    right: 30px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 220px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(56, 189, 248, 0.25);
     border-radius: 12px;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     z-index: 10;
-    box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
-    transition: all 0.2s ease;
-    user-select: none;
-    -webkit-user-select: none;
+    cursor: pointer;
+    overflow: hidden;
+    display: none; /* Sistem çalışınca aktif olacak */
 }
-.demo-btn:hover, .demo-btn.active {
-    background: rgba(56, 189, 248, 0.35);
-    color: #fff;
-    box-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
-    transform: scale(1.05);
+
+.throttle-bar.active {
+    display: block;
+}
+
+.throttle-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 0%;
+    background: linear-gradient(to top, rgba(56, 189, 248, 0.4), rgba(56, 189, 248, 0.9));
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
+    border-radius: 0 0 12px 12px;
+    transition: height 0.05s linear;
+}
+
+.throttle-thumb {
+    position: absolute;
+    bottom: 0%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 18px;
+    background: #38bdf8;
+    border-radius: 9px;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.8);
+    pointer-events: none;
+    transition: bottom 0.05s linear;
+}
+
+.throttle-label {
+    position: fixed;
+    right: 20px;
+    top: calc(50% - 135px);
+    font-size: 9px;
+    color: rgba(56, 189, 248, 0.7);
+    letter-spacing: 1px;
+    text-align: center;
+    width: 45px;
+    z-index: 10;
+    display: none;
+}
+.throttle-label.active {
+    display: block;
 }
 </style>
 </head>
@@ -217,8 +254,12 @@ button.stop-btn:hover {
 <!-- Ekran Altı Kuzey Işıkları Efekti -->
 <div class="aurora-glow"></div>
 
-<!-- Sağ Üst Demo Simülasyon Butonu -->
-<button id="demoBtn" class="demo-btn">DEMO HIZLANDIR</button>
+<!-- Sağ Kenar Gaz Pedalı Arayüzü -->
+<div id="throttleLabel" class="throttle-label">GAZ</div>
+<div id="throttleBar" class="throttle-bar">
+    <div id="throttleFill" class="throttle-fill"></div>
+    <div id="throttleThumb" class="throttle-thumb"></div>
+</div>
 
 <div class="container" id="mainContainer">
     <div class="slider-wrapper">
@@ -241,8 +282,8 @@ let currentSpeedForVisual = 0;
 let waveAngle = 0;
 let isEngineRunning = false;
 let waveScaleFactor = 0.0;
-let isSimulating = false; // Demo hızlandırma durumu
-let simulatedSpeed = 0;
+let throttleValue = 0.0; // 0.0 ile 1.0 arası gaz seviyesi
+let isDraggingThrottle = false;
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -387,27 +428,34 @@ function updateEngine(speed) {
     previousSpeed = speed;
 }
 
-// DEMO BUTONU MANTIĞI (Basılı tutunca hızlanır, bırakınca yavaşlar)
-const demoBtn = document.getElementById("demoBtn");
+// GAZ PEDALI (THROTTLE) KONTROL MANTIĞI
+const throttleBar = document.getElementById("throttleBar");
+const throttleFill = document.getElementById("throttleFill");
+const throttleThumb = document.getElementById("throttleThumb");
+const throttleLabel = document.getElementById("throttleLabel");
 
-function startSimulation() {
-    if(!isEngineRunning) return;
-    isSimulating = true;
-    demoBtn.classList.add("active");
+function updateThrottlePosition() {
+    throttleFill.style.height = `${throttleValue * 100}%`;
+    throttleThumb.style.bottom = `${throttleValue * 100}%`;
 }
 
-function stopSimulation() {
-    isSimulating = false;
-    demoBtn.classList.remove("active");
+function handleThrottleMove(clientY) {
+    const rect = throttleBar.getBoundingClientRect();
+    let y = rect.bottom - clientY; // Alttan yukarıya mesafe
+    let val = y / rect.height;
+    if (val < 0) val = 0;
+    if (val > 1) val = 1;
+    throttleValue = val;
+    updateThrottlePosition();
 }
 
-demoBtn.addEventListener("mousedown", startSimulation);
-demoBtn.addEventListener("mouseup", stopSimulation);
-demoBtn.addEventListener("mouseleave", stopSimulation);
+throttleBar.addEventListener("mousedown", (e) => { isDraggingThrottle = true; handleThrottleMove(e.clientY); });
+window.addEventListener("mousemove", (e) => { if(isDraggingThrottle) handleThrottleMove(e.clientY); });
+window.addEventListener("mouseup", () => { isDraggingThrottle = false; });
 
-// Mobil / Dokunmatik ekranlar için
-demoBtn.addEventListener("touchstart", (e) => { e.preventDefault(); startSimulation(); });
-demoBtn.addEventListener("touchend", (e) => { e.preventDefault(); stopSimulation(); });
+throttleBar.addEventListener("touchstart", (e) => { isDraggingThrottle = true; handleThrottleMove(e.touches[0].clientY); });
+window.addEventListener("touchmove", (e) => { if(isDraggingThrottle) handleThrottleMove(e.touches[0].clientY); });
+window.addEventListener("touchend", () => { isDraggingThrottle = false; });
 
 document.getElementById("actionBtn").onclick = async () => {
     const btn = document.getElementById("actionBtn");
@@ -415,6 +463,8 @@ document.getElementById("actionBtn").onclick = async () => {
     
     document.getElementById("startPanel").classList.add("zoom-out");
     document.getElementById("metricPanel").classList.add("zoom-in");
+    throttleBar.classList.add("active");
+    throttleLabel.classList.add("active");
 
     await loadSounds();
     
@@ -437,7 +487,7 @@ document.getElementById("actionBtn").onclick = async () => {
     // GPS Takibi (Gerçek Sürüş İçin)
     watchId = navigator.geolocation.watchPosition(
         pos => {
-            if(isSimulating) return; // Demo modundaysa GPS'i ezip simülasyonu çalıştıracağız
+            if(isDraggingThrottle || throttleValue > 0) return; // Gaz basılıyken GPS ezip simülasyonu uygular
             const lat = pos.coords.latitude;
             const lon = pos.coords.longitude;
             const now = Date.now();
@@ -461,25 +511,25 @@ document.getElementById("actionBtn").onclick = async () => {
             document.getElementById("status").innerText = `${mode.toUpperCase()} (${speed} KM/H)`;
         },
         err => { 
-            if(!isSimulating) document.getElementById("status").innerText = "GPS BEKLENİYOR (DEMO KULLANABİLİRSİN)"; 
+            if(throttleValue === 0) document.getElementById("status").innerText = "GPS BEKLENİYOR (SAĞDAN GAZ VEREBİLİRSİN)"; 
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
 };
 
-// Demo hız simülasyon döngüsü (Her karede çalışır)
-function runSimulationLoop() {
+// Gaz Simülasyon Döngüsü (Parmağını çekince gaz otomatik sıfırlanır / yaylanır)
+function runThrottleLoop() {
     if(isEngineRunning) {
-        if(isSimulating) {
-            simulatedSpeed += 3; // Basılı tuttukça hız artar
-            if(simulatedSpeed > 180) simulatedSpeed = 180;
-        } else {
-            simulatedSpeed -= 4; // Bırakınca hız rölantiye düşer
-            if(simulatedSpeed < 0) simulatedSpeed = 0;
+        if(!isDraggingThrottle && throttleValue > 0) {
+            throttleValue -= 0.03; // Bırakınca yavaşça gaz kesilir
+            if(throttleValue < 0) throttleValue = 0;
+            updateThrottlePosition();
         }
 
-        if(isSimulating || simulatedSpeed > 0) {
-            smoothedSpeed += (simulatedSpeed - smoothedSpeed) * 0.2;
+        let targetSpeed = throttleValue * 200; // Tam gaz 200 KM/H
+        
+        if(throttleValue > 0 || isDraggingThrottle) {
+            smoothedSpeed += (targetSpeed - smoothedSpeed) * 0.15;
             const speed = Math.max(0, Math.round(smoothedSpeed));
             currentSpeedForVisual = speed;
 
@@ -490,14 +540,17 @@ function runSimulationLoop() {
             document.getElementById("status").innerText = `${mode.toUpperCase()} (${speed} KM/H)`;
         }
     }
-    requestAnimationFrame(runSimulationLoop);
+    requestAnimationFrame(runThrottleLoop);
 }
-runSimulationLoop();
+runThrottleLoop();
 
 document.getElementById("stopBtn").onclick = () => {
     if(!audioCtx) return;
-    isSimulating = false;
-    demoBtn.classList.remove("active");
+    isDraggingThrottle = false;
+    throttleValue = 0;
+    updateThrottlePosition();
+    throttleBar.classList.remove("active");
+    throttleLabel.classList.remove("active");
 
     if(activeGain) {
         try {
@@ -535,7 +588,6 @@ document.getElementById("stopBtn").onclick = () => {
         lastLon = null;
         lastTime = null;
         smoothedSpeed = 0;
-        simulatedSpeed = 0;
         previousSpeed = 0;
         currentSpeedForVisual = 0;
         isEngineRunning = false;
