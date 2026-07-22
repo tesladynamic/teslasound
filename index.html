@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - PowerDown Edition</title>
+<title>VoltSound - Smooth Shutdown</title>
 
 <style>
 body{
@@ -158,7 +158,7 @@ animateWaves();
 let audioCtx = null;
 let soundBuffers = {};
 let activeSource = null;
-let masterGain = null;
+let activeGain = null;
 let biquadFilter = null;
 let watchId = null;
 
@@ -179,18 +179,10 @@ const files = {
 async function loadSounds() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Master ses kontrolü (Fade-out için)
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 1.0;
-
         biquadFilter = audioCtx.createBiquadFilter();
         biquadFilter.type = "lowpass";
         biquadFilter.frequency.value = 400;
-
-        // Bağlantı: Kaynak -> Filtre -> MasterGain -> Hoparlör
-        biquadFilter.connect(masterGain);
-        masterGain.connect(audioCtx.destination);
+        biquadFilter.connect(audioCtx.destination);
     }
 
     for (let key in files) {
@@ -225,26 +217,38 @@ function switchSoundMode(mode) {
     if(mode === currentMode) return;
     if(!soundBuffers[mode]) return;
 
-    if(activeSource) {
-        try { activeSource.stop(); } catch(e){}
+    // Eski ses varsa önce onu yumuşakça kapatıp sonlandır
+    if(activeSource && activeGain) {
+        try {
+            activeGain.gain.setValueAtTime(activeGain.gain.value, audioCtx.currentTime);
+            activeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.15);
+            let oldSource = activeSource;
+            setTimeout(() => { try { oldSource.stop(); } catch(e){} }, 200);
+        } catch(e){}
     }
 
+    // Yeni kaynak ve ona özel gain (ses kontrolü) oluştur
     const source = audioCtx.createBufferSource();
     source.buffer = soundBuffers[mode];
     source.loop = true;
 
-    // Filtreye bağlıyoruz (MasterGain zaten filtrenin sonuna bağlı)
-    source.connect(biquadFilter);
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
+    // Yeni ses açılırken çıt pıt sesini engellemek için mini bir fade-in
+    gainNode.gain.linearRampToValueAtTime(1.0, audioCtx.currentTime + 0.15);
+
+    source.connect(gainNode);
+    gainNode.connect(biquadFilter);
     source.start(0);
 
     activeSource = source;
+    activeGain = gainNode;
     currentMode = mode;
 }
 
 function updateEngine(speed) {
     if(!activeSource) return;
 
-    const accel = speed - previousSpeed;
     let rate = 0.80 + (speed / 120);
     rate = Math.max(0.75, Math.min(2.2, rate));
 
@@ -264,9 +268,6 @@ document.getElementById("actionBtn").onclick = async () => {
     if(audioCtx.state === 'suspended') {
         await audioCtx.resume();
     }
-
-    // Başlatırken ses seviyesini tam aç (önceki kapanıştan kalan olabilir diye)
-    masterGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
 
     switchSoundMode("idle");
 
@@ -309,18 +310,21 @@ document.getElementById("actionBtn").onclick = async () => {
 document.getElementById("stopBtn").onclick = () => {
     if(!audioCtx) return;
 
-    // --- ELEKTRONİK KAPANIŞ (SHUTDOWN FADE-OUT) ---
-    // 0.4 saniye içinde ses seviyesini sıfıra indirerek pürüzsüzce kapatıyoruz
-    const fadeDuration = 0.4;
-    masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
-    masterGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + fadeDuration);
+    // DURDUR butonuna basınca 0.5 saniye boyunca sesi tertemiz sıfıra indir
+    if(activeGain) {
+        try {
+            activeGain.gain.setValueAtTime(activeGain.gain.value, audioCtx.currentTime);
+            activeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+        } catch(e){}
+    }
 
-    // Kapanış efekti bittikten sonra (0.45 sn sonra) her şeyi tamamen durdur
+    // Ses tamamen sönümlendikten sonra sistemi kapat
     setTimeout(() => {
         if(activeSource) {
             try { activeSource.stop(); } catch(e){}
             activeSource = null;
         }
+        activeGain = null;
         currentMode = "";
 
         if(watchId !== null) {
@@ -340,7 +344,7 @@ document.getElementById("stopBtn").onclick = () => {
         document.getElementById("actionBtn").style.display = "inline-block";
         document.getElementById("actionBtn").innerText = "BAŞLAT";
         document.getElementById("status").innerText = "SİSTEM HAZIR";
-    }, 450);
+    }, 550);
 };
 </script>
 
