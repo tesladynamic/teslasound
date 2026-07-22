@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Warp Edition</title>
+<title>VoltSound - Warp Wave Edition</title>
 
 <style>
 body{
@@ -19,7 +19,6 @@ body{
     overflow:hidden;
 }
 
-/* Arka plan yıldız canvas'ı */
 canvas {
     position: fixed;
     top: 0;
@@ -31,12 +30,12 @@ canvas {
 
 .container{
     text-align:center;
-    background:rgba(10, 10, 15, 0.75);
-    border: 1px solid rgba(56, 189, 248, 0.2);
+    background:rgba(10, 10, 15, 0.65);
+    border: 1px solid rgba(56, 189, 248, 0.25);
     padding: 40px 60px;
-    border-radius: 24px;
-    box-shadow: 0 0 50px rgba(56, 189, 248, 0.15);
-    backdrop-filter: blur(12px);
+    border-radius: 28px;
+    box-shadow: 0 0 60px rgba(56, 189, 248, 0.2);
+    backdrop-filter: blur(14px);
     z-index: 2;
 }
 
@@ -46,7 +45,7 @@ canvas {
     line-height: 1;
     letter-spacing: -2px;
     color: #38bdf8;
-    text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+    text-shadow: 0 0 25px rgba(56, 189, 248, 0.6);
 }
 
 .unit {
@@ -59,7 +58,7 @@ canvas {
 
 #status{
     margin-top: 20px;
-    padding: 6px 16px;
+    padding: 6px 18px;
     background: rgba(56, 189, 248, 0.15);
     color: #38bdf8;
     border-radius: 20px;
@@ -102,13 +101,14 @@ button:hover {
 </div>
 
 <script>
-// --- YILDIZ ANİMASYONU (WARP EFFECT) ---
+// --- YILDIZ VE IŞIK DALGALARI ANİMASYONU ---
 const canvas = document.getElementById("space");
 const ctx = canvas.getContext("2d");
 
 let stars = [];
-const numStars = 300;
+const numStars = 250;
 let currentSpeedForVisual = 0;
+let waveAngle = 0;
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -126,14 +126,14 @@ for (let i = 0; i < numStars; i++) {
 }
 
 function animateSpace() {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
     
-    // Hıza bağlı olarak yıldızların akış hızı artar (Warp efekti)
-    const warpSpeed = 1 + (currentSpeedForVisual / 3);
+    // 1. Yıldız Warp Efekti
+    const warpSpeed = 1 + (currentSpeedForVisual / 2.5);
 
     for (let i = 0; i < stars.length; i++) {
         let s = stars[i];
@@ -155,6 +155,31 @@ function animateSpace() {
             ctx.fillRect(px, py, size, size);
         }
     }
+
+    // 2. Neon Işık Dalgaları (Wave / Pulse Efekti)
+    waveAngle += 0.03 + (currentSpeedForVisual / 100);
+    ctx.lineWidth = 2 + (currentSpeedForVisual / 30);
+
+    // Ekranda süzülen çoklu neon dalgalar çziyoruz
+    for (let w = 0; w < 3; w++) {
+        ctx.beginPath();
+        // Hızlandıkça rengi turkuazdan neon mora/maviye kayabilir ya da parlak mavi kalır
+        ctx.strokeStyle = `rgba(56, 189, 248, ${0.15 + (w * 0.1)})`;
+        
+        for (let x = 0; x < canvas.width; x += 15) {
+            // Hızlandıkça dalganın yüksekliği (genliği) ve frekansı artar
+            const frequency = 0.008 + (currentSpeedForVisual * 0.0002);
+            const amplitude = 30 + (currentSpeedForVisual * 0.8);
+            
+            const y = cy + Math.sin(x * frequency + waveAngle + (w * 0.8)) * amplitude 
+                      * Math.sin(waveAngle * 0.5); // Dalgaların kendi içinde bükülmesi için
+
+            if (x === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
     requestAnimationFrame(animateSpace);
 }
 animateSpace();
@@ -279,7 +304,7 @@ document.getElementById("startBtn").onclick = async () => {
             smoothedSpeed += (kmh - smoothedSpeed) * 0.15;
             const speed = Math.max(0, Math.round(smoothedSpeed));
 
-            // Görsel yıldız hızına güncel hızı aktarıyoruz
+            // Görsel efektlere hızı aktarıyoruz (Yıldızlar + Işık Dalgaları)
             currentSpeedForVisual = speed;
 
             document.getElementById("speed").innerText = speed;
