@@ -129,22 +129,18 @@ button.stop-btn {
     border: 1px solid rgba(239, 68, 68, 0.4);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37), inset 0 1px 1px rgba(255, 255, 255, 0.2);
     color: #fca5a5;
-    font-size: 18px;
-    width: 48px;
-    height: 48px;
-    padding: 0;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    font-size: 14px;
+    padding: 10px 24px;
+    border-radius: 16px;
     margin-top: 6px;
+    letter-spacing: 1.5px;
 }
 button.stop-btn:hover {
     background: rgba(220, 38, 38, 0.4);
     border-color: rgba(248, 113, 113, 0.7);
     box-shadow: 0 8px 32px rgba(220, 38, 38, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.4);
     color: #fff;
-    transform: scale(1.1);
+    transform: scale(1.05);
 }
 
 .throttle-bar {
@@ -204,7 +200,7 @@ button.stop-btn:hover {
         
         <div id="metricPanel" class="panel">
             <div id="status">SİSTEM HAZIR</div>
-            <button id="stopBtn" class="stop-btn">✕</button>
+            <button id="stopBtn" class="stop-btn">DURDUR</button>
         </div>
     </div>
 </div>
@@ -297,7 +293,6 @@ let lowpassFilter = null;
 let magneticFilter = null;
 let magneticGain = null;
 
-// Gecikme ve Yankı Düğümleri
 let delayNode = null;
 let feedbackGain = null;
 let reverbGain = null;
@@ -337,22 +332,17 @@ async function loadEngineSound() {
         magneticFilter.connect(magneticGain);
         magneticGain.connect(masterGain);
 
-        // --- DERİN YANKI ZİNCİRİ (Reverb & Delay) ---
-        // 1. Sesi hafif geciktir (boşluk hissi)
         delayNode = audioCtx.createDelay(1.0);
-        delayNode.delayTime.value = 0.15; // 150ms gecikme
+        delayNode.delayTime.value = 0.15;
         
-        // 2. Geciken sesi kendi içine geri besle (kuyruk oluştur)
         feedbackGain = audioCtx.createGain();
-        feedbackGain.gain.value = 0.4; // Yankının uzama süresi (Çok açarsak ses patlar, %40 ideal)
+        feedbackGain.gain.value = 0.4;
 
-        // 3. Yankı sisteminin ana sesi
         reverbGain = audioCtx.createGain();
-        reverbGain.gain.value = 0.0; // Başlangıçta yankı yok
+        reverbGain.gain.value = 0.0;
 
-        // Yankı zincirini bağla
         delayNode.connect(feedbackGain);
-        feedbackGain.connect(delayNode); // Kendi içine dönen loop
+        feedbackGain.connect(delayNode);
         delayNode.connect(reverbGain);
         reverbGain.connect(masterGain);
     }
@@ -402,16 +392,11 @@ function updateEngineAudio(speed) {
     let magneticQ = 4.0;
     let reverbVolume = 0.0;
 
-    // 80 KM/S SONRASI YANKILI MANYETİK YAYILMA
     if (speed > 80) {
         let overSpeed = speed - 80;
-        
-        // Manyetik bant hacmi artar
         magneticVolume = Math.min(0.9, overSpeed / 50); 
         magneticFreq = 2200 + (overSpeed * 55); 
         magneticQ = Math.max(1.5, 4.0 - (overSpeed * 0.03)); 
-        
-        // YANKI (REVERB) HACMİNİ KADEMELİ AÇ
         reverbVolume = Math.min(0.6, overSpeed / 60); 
     }
 
@@ -429,7 +414,6 @@ function updateEngineAudio(speed) {
         magneticFilter.Q.linearRampToValueAtTime(magneticQ, now + 0.1);
     }
 
-    // Yankı kazancını güncelle
     if(reverbGain) {
         reverbGain.gain.cancelScheduledValues(now);
         reverbGain.gain.setValueAtTime(reverbGain.gain.value, now);
@@ -468,7 +452,6 @@ function startSolidEngine() {
     activeSource.buffer = engineBuffer;
     activeSource.loop = true;
 
-    // Ana sinyali hem doğrudan hoparlörlere hem de gecikme (yankı) devresine gönder
     activeSource.connect(lowpassFilter);
     activeSource.connect(magneticFilter);
     if(delayNode) {
