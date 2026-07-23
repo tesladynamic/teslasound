@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Ultra Smooth Loop Edition</title>
+<title>VoltSound - Tesla Firmware Architecture Edition</title>
 
-<!-- Google Fonts: Fütüristik / Sci-Fi Tarzı Font (Orbitron) -->
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
 
 <style>
@@ -32,7 +31,6 @@ canvas {
     z-index: -1;
 }
 
-/* Ekranın altındaki Grok tarzı Kuzey Işıkları Efekti */
 .aurora-glow {
     position: fixed;
     bottom: -100px;
@@ -48,14 +46,8 @@ canvas {
 }
 
 @keyframes auroraPulse {
-    0% {
-        opacity: 0.5;
-        transform: translateX(-50%) scale(0.95);
-    }
-    100% {
-        opacity: 0.9;
-        transform: translateX(-50%) scale(1.05);
-    }
+    0% { opacity: 0.5; transform: translateX(-50%) scale(0.95); }
+    100% { opacity: 0.9; transform: translateX(-50%) scale(1.05); }
 }
 
 .container{
@@ -96,28 +88,11 @@ canvas {
     transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease;
 }
 
-#startPanel {
-    transform: scale(1);
-    opacity: 1;
-}
+#startPanel { transform: scale(1); opacity: 1; }
+#startPanel.zoom-out { transform: scale(0.5); opacity: 0; pointer-events: none; }
 
-#startPanel.zoom-out {
-    transform: scale(0.5);
-    opacity: 0;
-    pointer-events: none;
-}
-
-#metricPanel {
-    transform: scale(1.5);
-    opacity: 0;
-    pointer-events: none;
-}
-
-#metricPanel.zoom-in {
-    transform: scale(1);
-    opacity: 1;
-    pointer-events: auto;
-}
+#metricPanel { transform: scale(1.5); opacity: 0; pointer-events: none; }
+#metricPanel.zoom-in { transform: scale(1); opacity: 1; pointer-events: auto; }
 
 #status{
     margin-bottom: 15px;
@@ -135,10 +110,7 @@ canvas {
     transition: opacity 0.6s ease 0.2s, transform 0.6s ease 0.2s;
 }
 
-#metricPanel.zoom-in #status {
-    opacity: 1;
-    transform: translateY(0);
-}
+#metricPanel.zoom-in #status { opacity: 1; transform: translateY(0); }
 
 button{
     padding: 16px 36px;
@@ -155,11 +127,7 @@ button{
     letter-spacing: 1.5px;
 }
 
-button:hover {
-    background: #7dd3fc;
-    box-shadow: 0 0 45px rgba(56, 189, 248, 0.8);
-    transform: scale(1.05);
-}
+button:hover { background: #7dd3fc; box-shadow: 0 0 45px rgba(56, 189, 248, 0.8); transform: scale(1.05); }
 
 button.stop-btn {
     background: rgba(185, 28, 28, 0.25);
@@ -179,7 +147,6 @@ button.stop-btn:hover {
     transform: scale(1.05);
 }
 
-/* SAĞ KENAR: Dokunmatik Gaz Pedalı */
 .throttle-bar {
     position: fixed;
     right: 30px;
@@ -339,41 +306,11 @@ async function loadEngineSound() {
         try {
             const response = await fetch(ENGINE_SOUND_FILE);
             const arrayBuffer = await response.arrayBuffer();
-            let rawBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            
-            // DÖNGÜ ÇITIRTISINI TAMAMEN YOK EDEN GELİŞMİŞ PÜRLÜZSÜZLEŞTİRME (WINDOWING)
-            engineBuffer = applySmoothLoopEnvelope(audioCtx, rawBuffer, 0.08); 
+            engineBuffer = await audioCtx.decodeAudioData(arrayBuffer);
         } catch(e) {
             console.error("Tesla ses dosyası yüklenemedi:", e);
         }
     }
-}
-
-// Sesin baş ve son kenarlarını matematiksel olarak birbirine kusursuz harmanlayan fonksiyon
-function applySmoothLoopEnvelope(context, audioBuffer, duration) {
-    const numChannels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
-    const fadeSamples = Math.floor(sampleRate * duration);
-    const len = audioBuffer.getChannelData(0).length;
-
-    if (fadeSamples >= len / 2) return audioBuffer;
-
-    for (let c = 0; c < numChannels; c++) {
-        const channelData = audioBuffer.getChannelData(c);
-        
-        // Baş ve son kenarları Hanning penceresi mantığıyla pürüzsüzleştir
-        for (let i = 0; i < fadeSamples; i++) {
-            const envelope = 0.5 - 0.5 * Math.cos(Math.PI * (i / fadeSamples));
-            
-            // Başlangıç yumuşatması
-            channelData[i] *= envelope;
-            
-            // Bitiş yumuşatması
-            const endIdx = len - 1 - i;
-            channelData[endIdx] *= envelope;
-        }
-    }
-    return audioBuffer;
 }
 
 function distanceMeters(lat1, lon1, lat2, lon2){
@@ -392,6 +329,7 @@ function updateEngineAudio(speed) {
     rate = Math.max(0.75, Math.min(1.85, rate));
 
     try {
+        activeSource.playbackRate.cancelScheduledValues(now);
         activeSource.playbackRate.setValueAtTime(activeSource.playbackRate.value, now);
         activeSource.playbackRate.linearRampToValueAtTime(rate, now + 0.05);
     } catch(e){}
@@ -399,6 +337,7 @@ function updateEngineAudio(speed) {
     let targetFreq = 500 + (speed * 30);
     targetFreq = Math.max(500, Math.min(5000, targetFreq));
     if(lowpassFilter) {
+        lowpassFilter.frequency.cancelScheduledValues(now);
         lowpassFilter.frequency.setValueAtTime(lowpassFilter.frequency.value, now);
         lowpassFilter.frequency.linearRampToValueAtTime(targetFreq, now + 0.05);
     }
@@ -413,14 +352,17 @@ function updateEngineAudio(speed) {
     }
 
     if(metallicGain && metallicFilter) {
+        metallicGain.gain.cancelScheduledValues(now);
         metallicGain.gain.setValueAtTime(metallicGain.gain.value, now);
-        metallicGain.gain.linearRampToValueAtTime(metallicVolume, now + 0.05);
+        metallicGain.gain.linearRampToValueAtTime(metallicVolume, now + 0.08);
 
+        metallicFilter.frequency.cancelScheduledValues(now);
         metallicFilter.frequency.setValueAtTime(metallicFilter.frequency.value, now);
-        metallicFilter.frequency.linearRampToValueAtTime(metallicFreq, now + 0.05);
+        metallicFilter.frequency.linearRampToValueAtTime(metallicFreq, now + 0.08);
     }
 
     if(masterGain && isEngineRunning) {
+        masterGain.gain.cancelScheduledValues(now);
         masterGain.gain.setValueAtTime(masterGain.gain.value, now);
         masterGain.gain.linearRampToValueAtTime(1.0, now + 0.05);
     }
@@ -432,7 +374,7 @@ function startEngineSource() {
 
     const source = audioCtx.createBufferSource();
     source.buffer = engineBuffer;
-    source.loop = true; // Donanımsal kesintisiz akış
+    source.loop = true;
 
     source.connect(lowpassFilter);
     source.connect(metallicFilter);
@@ -441,8 +383,9 @@ function startEngineSource() {
     activeSource = source;
 
     if(masterGain) {
-        masterGain.gain.setValueAtTime(0.01, now);
-        masterGain.gain.linearRampToValueAtTime(1.0, now + 0.3);
+        masterGain.gain.cancelScheduledValues(now);
+        masterGain.gain.setValueAtTime(0.0, now);
+        masterGain.gain.linearRampToValueAtTime(1.0, now + 0.2);
     }
 }
 
@@ -571,6 +514,7 @@ document.getElementById("stopBtn").onclick = () => {
 
     if(masterGain) {
         try {
+            masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
             masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
             masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
         } catch(e){}
