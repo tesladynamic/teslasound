@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Seamless Crossfade Edition</title>
+<title>VoltSound - Dual Layer Performance Edition</title>
 
 <!-- Google Fonts: Fütüristik / Sci-Fi Tarzı Font (Orbitron) -->
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
@@ -294,14 +294,17 @@ function animateWaves() {
 animateWaves();
 
 let audioCtx = null;
-let engineBuffer = null; 
-let activeSource = null;
-let activeGain = null;
-let nextSource = null;
-let nextGain = null;
+let teslaBuffer = null; 
+let toostBuffer = null;
+
+let teslaSource = null;
+let teslaGain = null;
+
+let toostSource = null;
+let toostGain = null;
+
 let biquadFilter = null;
 let watchId = null;
-let loopTimer = null;
 
 let lastLat = null;
 let lastLon = null;
@@ -309,9 +312,10 @@ let lastTime = null;
 let gpsSpeed = 0;
 let smoothedSpeed = 0;
 
-const ENGINE_SOUND_FILE = "teslasound.wav";
+const TESLA_SOUND_FILE = "teslasound.wav";
+const TOOST_SOUND_FILE = "toost.wav";
 
-async function loadEngineSound() {
+async function loadSounds() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         biquadFilter = audioCtx.createBiquadFilter();
@@ -320,15 +324,46 @@ async function loadEngineSound() {
         biquadFilter.connect(audioCtx.destination);
     }
 
-    if (!engineBuffer) {
+    if (!teslaBuffer) {
         try {
-            const response = await fetch(ENGINE_SOUND_FILE);
-            const arrayBuffer = await response.arrayBuffer();
-            engineBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const res = await fetch(TESLA_SOUND_FILE);
+            const buf = await res.arrayBuffer();
+            let raw = await audioCtx.decodeAudioData(buf);
+            teslaBuffer = applyFadeToBuffer(audioCtx, raw, 0.05);
         } catch(e) {
-            console.error("Tesla ses dosyası yüklenemedi:", e);
+            console.error("teslasound.wav yüklenemedi:", e);
         }
     }
+
+    if (!toostBuffer) {
+        try {
+            const res = await fetch(TOOST_SOUND_FILE);
+            const buf = await res.arrayBuffer();
+            let raw = await audioCtx.decodeAudioData(buf);
+            toostBuffer = applyFadeToBuffer(audioCtx, raw, 0.05);
+        } catch(e) {
+            console.error("toost.wav yüklenemedi:", e);
+        }
+    }
+}
+
+function applyFadeToBuffer(context, audioBuffer, fadeDuration) {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const fadeSamples = Math.floor(sampleRate * fadeDuration);
+
+    for (let c = 0; c < numChannels; c++) {
+        const channelData = audioBuffer.getChannelData(c);
+        const len = channelData.length;
+        for (let i = 0; i < fadeSamples && i < len; i++) {
+            channelData[i] *= (i / fadeSamples);
+        }
+        for (let i = 0; i < fadeSamples && i < len; i++) {
+            const idx = len - 1 - i;
+            channelData[idx] *= (i / fadeSamples);
+        }
+    }
+    return audioBuffer;
 }
 
 function distanceMeters(lat1, lon1, lat2, lon2){
@@ -339,80 +374,74 @@ function distanceMeters(lat1, lon1, lat2, lon2){
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function updateEnginePitch(speed) {
-    let rate = 0.75 + (speed / 140);
-    rate = Math.max(0.75, Math.min(1.85, rate));
+// HIZA GÖRE SESLERİ VE PITCH DEĞERLERİNİ YÖNETME
+function updateEngineAudio(speed) {
+    if(!audioCtx) return;
+    const now = audioCtx.currentTime;
 
-    if(activeSource) {
-        activeSource.playbackRate.setTargetAtTime(rate, audioCtx.currentTime, 0.08);
-    }
-    if(nextSource) {
-        nextSource.playbackRate.setTargetAtTime(rate, audioCtx.currentTime, 0.08);
+    // 1. Tesla ses pitch ve filtre hesaplaması
+    let teslaRate = 0.75 + (speed / 160);
+    teslaRate = Math.max(0.75, Math.min(2.0, teslaRate));
+    if(teslaSource) {
+        teslaSource.playbackRate.setTargetAtTime(teslaRate, now, 0.08);
     }
 
-    let targetFreq = 500 + (speed * 35);
-    targetFreq = Math.max(500, Math.min(6000, targetFreq));
-    biquadFilter.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.08);
+    // 2. Toost ses (90 km/s'ten sonra devreye girer)
+    let toostTargetVolume = 0.0;
+    let toostRate = 0.8 + (speed / 130);
+    toostRate = Math.max(0.8, Math.min(2.2, toostRate));
+
+    if (speed > 85) {
+        // 85-150 km/s arasında kademeli olarak 0'dan 1.0'a tırmanır
+        toostTargetVolume = Math.min(1.0, (speed - 85) / 65);
+    }
+
+    if(toostSource && toostGain) {
+        toostSource.playbackRate.setTargetAtTime(toostRate, now, 0.08);
+        toostGain.gain.setTargetAtTime(toostTargetVolume, now, 0.2); // Yumuşak crossfade geçişi
+    }
+
+    // Filtre frekansı
+    let targetFreq = 500 + (speed * 40);
+    targetFreq = Math.max(500, Math.min(8000, targetFreq));
+    if(biquadFilter) {
+        biquadFilter.frequency.setTargetAtTime(targetFreq, now, 0.08);
+    }
 }
 
-// KESİNTİSİZ ÇİFT KAYNAKLI OTOMATİK CROSSFADE LOOP SİSTEMİ
-function startSeamlessEngine() {
-    if(!engineBuffer) return;
+// MOTOR SİSTEMİNİ BAŞLAT
+function startDualEngine() {
+    if(!teslaBuffer) return;
     const now = audioCtx.currentTime;
-    const duration = engineBuffer.duration;
-    // Dosya bitimine 0.3 saniye kala diğer sesi devreye sokup çapraz harmanlıyoruz ("ding" sesini tamamen yok eder)
-    const crossfadeTime = 0.3; 
-    const scheduleTime = Math.max(0.5, duration - crossfadeTime);
 
-    const source = audioCtx.createBufferSource();
-    source.buffer = engineBuffer;
+    // Ana Tesla Sesi
+    teslaSource = audioCtx.createBufferSource();
+    teslaSource.buffer = teslaBuffer;
+    teslaSource.loop = true;
 
-    const gainNode = audioCtx.createGain();
-    gainNode.gain.setValueAtTime(0.0, now);
-    gainNode.gain.linearRampToValueAtTime(1.0, now + crossfadeTime);
+    teslaGain = audioCtx.createGain();
+    teslaGain.gain.setValueAtTime(0.01, now);
+    teslaGain.gain.linearRampToValueAtTime(1.0, now + 0.4);
 
-    let rate = 0.75 + (smoothedSpeed / 140);
-    source.playbackRate.setValueAtTime(Math.max(0.75, Math.min(1.85, rate)), now);
+    teslaSource.playbackRate.setValueAtTime(0.75, now);
+    teslaSource.connect(teslaGain);
+    teslaGain.connect(biquadFilter);
+    teslaSource.start(now);
 
-    source.connect(gainNode);
-    gainNode.connect(biquadFilter);
-    source.start(now);
+    // İkinci Toost Sesi (Başlangıçta gain 0 olarak arka planda hazır bekler)
+    if(toostBuffer) {
+        toostSource = audioCtx.createBufferSource();
+        toostSource.buffer = toostBuffer;
+        toostSource.loop = true;
 
-    activeSource = source;
-    activeGain = gainNode;
+        toostGain = audioCtx.createGain();
+        toostGain.gain.setValueAtTime(0.0, now); // Başta tamamen sessiz
 
-    // Sonraki döngüyü zamanla
-    loopTimer = setTimeout(() => {
-        if(!isEngineRunning) return;
-        
-        // Yeni döngü kaynağını başlat
-        const nextNow = audioCtx.currentTime;
-        const nSource = audioCtx.createBufferSource();
-        nSource.buffer = engineBuffer;
-
-        const nGain = audioCtx.createGain();
-        nGain.gain.setValueAtTime(0.0, nextNow);
-        nGain.gain.linearRampToValueAtTime(1.0, nextNow + crossfadeTime);
-        nSource.playbackRate.setValueAtTime(Math.max(0.75, Math.min(1.85, rate)), nextNow);
-
-        nSource.connect(nGain);
-        nGain.connect(biquadFilter);
-        nSource.start(nextNow);
-
-        // Eski kaynağı yavaşça kıs
-        if(activeGain) {
-            activeGain.gain.setValueAtTime(activeGain.gain.value, nextNow);
-            activeGain.gain.linearRampToValueAtTime(0.0, nextNow + crossfadeTime);
-            setTimeout(() => { try { activeSource.stop(); } catch(e){} }, (crossfadeTime + 0.1) * 1000);
-        }
-
-        activeSource = nSource;
-        activeGain = nGain;
-
-        // Döngüyü tekrar tetikle
-        startSeamlessEngine();
-
-    }, scheduleTime * 1000 / (rate > 0 ? rate : 1));
+        toostSource.playbackRate.setValueAtTime(0.8, now);
+        toostSource.connect(toostGain);
+        toostGain.connect(biquadFilter);
+        toostSource.start(now);
+    }
 }
 
 const throttleBar = document.getElementById("throttleBar");
@@ -452,14 +481,14 @@ document.getElementById("actionBtn").onclick = async () => {
     throttleBar.classList.add("active");
     throttleLabel.classList.add("active");
 
-    await loadEngineSound();
+    await loadSounds();
     
     if(audioCtx.state === 'suspended') {
         await audioCtx.resume();
     }
 
     isEngineRunning = true;
-    startSeamlessEngine();
+    startDualEngine();
     
     waveScaleFactor = 0.0;
     const growInterval = setInterval(() => {
@@ -517,11 +546,11 @@ function runSimulationLoop() {
         const speed = Math.max(0, Math.round(smoothedSpeed));
         currentSpeedForVisual = speed;
 
-        updateEnginePitch(speed);
+        updateEngineAudio(speed);
 
         let statusMode = "RÖLANTİ";
-        if (speed >= 30 && speed < 80) statusMode = "SÜRÜŞ";
-        else if (speed >= 80 && speed < 140) statusMode = "SPORT";
+        if (speed >= 30 && speed < 90) statusMode = "SÜRÜŞ";
+        else if (speed >= 90 && speed < 140) statusMode = "SPORT+TOOST";
         else if (speed >= 140) statusMode = "BOOST";
 
         document.getElementById("status").innerText = `${statusMode} (${speed} KM/H)`;
@@ -538,15 +567,16 @@ document.getElementById("stopBtn").onclick = () => {
     throttleBar.classList.remove("active");
     throttleLabel.classList.remove("active");
 
-    if(loopTimer) {
-        clearTimeout(loopTimer);
-        loopTimer = null;
-    }
-
-    if(activeGain) {
+    if(teslaGain) {
         try {
-            activeGain.gain.setValueAtTime(activeGain.gain.value, audioCtx.currentTime);
-            activeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+            teslaGain.gain.setValueAtTime(teslaGain.gain.value, audioCtx.currentTime);
+            teslaGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+        } catch(e){}
+    }
+    if(toostGain) {
+        try {
+            toostGain.gain.setValueAtTime(toostGain.gain.value, audioCtx.currentTime);
+            toostGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
         } catch(e){}
     }
 
@@ -563,11 +593,10 @@ document.getElementById("stopBtn").onclick = () => {
     }, 20);
 
     setTimeout(() => {
-        if(activeSource) {
-            try { activeSource.stop(); } catch(e){}
-            activeSource = null;
-        }
-        activeGain = null;
+        if(teslaSource) { try { teslaSource.stop(); } catch(e){} teslaSource = null; }
+        if(toostSource) { try { toostSource.stop(); } catch(e){} toostSource = null; }
+        teslaGain = null;
+        toostGain = null;
 
         if(watchId !== null) {
             navigator.geolocation.clearWatch(watchId);
