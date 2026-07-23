@@ -351,7 +351,6 @@ function distanceMeters(lat1, lon1, lat2, lon2){
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-// PITCH VE METALİK EVRİLME KONTROLÜ
 function updateEnginePitch(speed) {
     let rate = 0.75 + (speed / 140);
     rate = Math.max(0.75, Math.min(1.85, rate));
@@ -390,16 +389,19 @@ function updateEnginePitch(speed) {
     }
 }
 
-// KESİNTİSİZ AKILLI CROSSFADE LOOP MOTORU (Döngü çıtırtısını tamamen yok eder)
+// GÜVENLİ VE HATASIZ CROSSFADE DÖNGÜSÜ
 function scheduleSeamlessLoop() {
     if (!isEngineRunning || !engineBuffer) return;
 
     const duration = engineBuffer.duration;
-    const crossfadeDuration = 0.5; // Sesin bitimine yakın 0.5 saniyede diğer kaynağa pürüzsüz geçiş yapar
-    const triggerTime = (duration - crossfadeDuration) * 1000;
+    const crossfadeDuration = 0.3; 
+    const currentRate = (activeSource && activeSource.playbackRate.value > 0) ? activeSource.playbackRate.value : 1.0;
+    
+    // Güvenli zamanlama hesaplaması
+    const triggerTime = Math.max(0.2, (duration - crossfadeDuration) / currentRate) * 1000;
 
     crossfadeTimeout = setTimeout(() => {
-        if (!isEngineRunning) return;
+        if (!isEngineRunning || !engineBuffer) return;
 
         const now = audioCtx.currentTime;
         const nextSource = audioCtx.createBufferSource();
@@ -409,7 +411,6 @@ function scheduleSeamlessLoop() {
         nextGain.gain.setValueAtTime(0.0, now);
         nextGain.gain.linearRampToValueAtTime(1.0, now + crossfadeDuration);
 
-        let currentRate = activeSource ? activeSource.playbackRate.value : 1.0;
         nextSource.playbackRate.setValueAtTime(currentRate, now);
 
         nextSource.connect(nextGain);
@@ -418,21 +419,23 @@ function scheduleSeamlessLoop() {
         nextSource.start(now);
 
         if (activeGain) {
-            activeGain.gain.setValueAtTime(activeGain.gain.value, now);
-            activeGain.gain.linearRampToValueAtTime(0.0, now + crossfadeDuration);
+            try {
+                activeGain.gain.setValueAtTime(activeGain.gain.value, now);
+                activeGain.gain.linearRampToValueAtTime(0.0, now + crossfadeDuration);
+            } catch(e){}
             
             const oldSource = activeSource;
             setTimeout(() => {
                 try { oldSource.stop(); } catch(e){}
-            , (crossfadeDuration + 0.1) * 1000);
+            }, (crossfadeDuration + 0.1) * 1000);
         }
 
         activeSource = nextSource;
         activeGain = nextGain;
 
-        scheduleSeamlessLoop(); // Döngüyü tekrar kur
+        scheduleSeamlessLoop();
 
-    }, triggerTime / (activeSource ? activeSource.playbackRate.value : 1.0));
+    }, triggerTime);
 }
 
 function startEngine() {
