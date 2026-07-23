@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - Pure PCM Crossfade Stitch Edition</title>
+<title>VoltSound - Master Equal-Power Crossfade Edition</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
 
@@ -262,12 +262,15 @@ animateWaves();
 
 let audioCtx = null;
 let engineBuffer = null; 
-let activeSource = null;
-let masterGain = null;
 let lowpassFilter = null;
 let metallicFilter = null;
 let metallicGain = null;
 let watchId = null;
+
+// Çok uzun ve kademeli crossfade için çift ses kanalı (A ve B)
+let sourceA = null, gainA = null;
+let sourceB = null, gainB = null;
+let loopTimeout = null;
 
 let lastLat = null;
 let lastLon = null;
@@ -281,14 +284,10 @@ async function loadEngineSound() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.0;
-        masterGain.connect(audioCtx.destination);
-
         lowpassFilter = audioCtx.createBiquadFilter();
         lowpassFilter.type = "lowpass";
         lowpassFilter.frequency.value = 600;
-        lowpassFilter.connect(masterGain);
+        lowpassFilter.connect(audioCtx.destination);
 
         metallicFilter = audioCtx.createBiquadFilter();
         metallicFilter.type = "bandpass";
@@ -299,7 +298,7 @@ async function loadEngineSound() {
         metallicGain.gain.value = 0.0;
 
         metallicFilter.connect(metallicGain);
-        metallicGain.connect(masterGain);
+        metallicGain.connect(audioCtx.destination);
     }
 
     if (!engineBuffer) {
@@ -308,23 +307,23 @@ async function loadEngineSound() {
             const arrayBuffer = await response.arrayBuffer();
             let rawBuffer = await audioCtx.decodeAudioData(arrayBuffer);
             
-            // PCM Örneklerini baştan sona inceleyip baş ve sonu matematiksel olarak yüzde yüz sıfıra kilitleyen simetrik pencereleme
-            engineBuffer = createClicklessBuffer(audioCtx, rawBuffer);
+            // Ses dosyasının içine derin bir Equal-Power crossfade ön işlemesi gömüyoruz
+            engineBuffer = createPrefadeBuffer(audioCtx, rawBuffer);
         } catch(e) {
             console.error("Tesla ses dosyası yüklenemedi:", e);
         }
     }
 }
 
-// "Pıt pıt" (click/pop) seslerini tamamen yok etmek için PCM buffer'ının ilk ve son 10ms'sini tamamen 0'a (sessizliğe) 
-// yumuşak bir eğriyle (cosine window) bağlayan kesin çözüm fonksiyonu
-function createClicklessBuffer(context, sourceBuffer) {
+// Dosya seviyesinde uzun ve hissedilmez bir fade uygular
+function createPrefadeBuffer(context, sourceBuffer) {
     const numChannels = sourceBuffer.numberOfChannels;
     const sampleRate = sourceBuffer.sampleRate;
     const length = sourceBuffer.length;
-    
     const newBuffer = context.createBuffer(numChannels, length, sampleRate);
-    const fadeSamples = Math.floor(sampleRate * 0.015); // 15 milisaniyelik mikro fade
+    
+    // Kenar çıtırtılarını tamamen yok etmek için ilk ve son 50ms tamamen sessizliğe sönümlenir
+    const padSamples = Math.floor(sampleRate * 0.05);
 
     for (let c = 0; c < numChannels; c++) {
         const src = sourceBuffer.getChannelData(c);
@@ -332,20 +331,13 @@ function createClicklessBuffer(context, sourceBuffer) {
 
         for (let i = 0; i < length; i++) {
             let sample = src[i];
-
-            // Başlangıç mikro yumuşatması (Click önleyici)
-            if (i < fadeSamples) {
-                const multiplier = 0.5 - 0.5 * Math.cos(Math.PI * (i / fadeSamples));
-                sample *= multiplier;
+            if (i < padSamples) {
+                sample *= (i / padSamples);
             }
-            
-            // Bitiş mikro yumuşatması (Loop dönüşlerindeki pıt pıt sesini kesen yer)
-            const distanceFromEnd = length - 1 - i;
-            if (distanceFromEnd < fadeSamples) {
-                const multiplier = 0.5 - 0.5 * Math.cos(Math.PI * (distanceFromEnd / fadeSamples));
-                sample *= multiplier;
+            const endDist = length - 1 - i;
+            if (endDist < padSamples) {
+                sample *= (endDist / padSamples);
             }
-
             dst[i] = sample;
         }
     }
@@ -361,24 +353,24 @@ function distanceMeters(lat1, lon1, lat2, lon2){
 }
 
 function updateEngineAudio(speed) {
-    if (!audioCtx || !activeSource) return;
+    if (!audioCtx) return;
     const now = audioCtx.currentTime;
 
     let rate = 0.75 + (speed / 140);
     rate = Math.max(0.75, Math.min(1.85, rate));
 
-    try {
-        activeSource.playbackRate.cancelScheduledValues(now);
-        activeSource.playbackRate.setValueAtTime(activeSource.playbackRate.value, now);
-        activeSource.playbackRate.linearRampToValueAtTime(rate, now + 0.05);
-    } catch(e){}
+    if(sourceA) {
+        try { sourceA.playbackRate.cancelScheduledValues(now); sourceA.playbackRate.setTargetAtTime(rate, now, 0.05); } catch(e){}
+    }
+    if(sourceB) {
+        try { sourceB.playbackRate.cancelScheduledValues(now); sourceB.playbackRate.setTargetAtTime(rate, now, 0.05); } catch(e){}
+    }
 
     let targetFreq = 500 + (speed * 30);
     targetFreq = Math.max(500, Math.min(5000, targetFreq));
     if(lowpassFilter) {
         lowpassFilter.frequency.cancelScheduledValues(now);
-        lowpassFilter.frequency.setValueAtTime(lowpassFilter.frequency.value, now);
-        lowpassFilter.frequency.linearRampToValueAtTime(targetFreq, now + 0.05);
+        lowpassFilter.frequency.setTargetAtTime(targetFreq, now, 0.05);
     }
 
     let metallicVolume = 0.0;
@@ -392,40 +384,86 @@ function updateEngineAudio(speed) {
 
     if(metallicGain && metallicFilter) {
         metallicGain.gain.cancelScheduledValues(now);
-        metallicGain.gain.setValueAtTime(metallicGain.gain.value, now);
-        metallicGain.gain.linearRampToValueAtTime(metallicVolume, now + 0.08);
+        metallicGain.gain.setTargetAtTime(metallicVolume, now, 0.08);
 
         metallicFilter.frequency.cancelScheduledValues(now);
-        metallicFilter.frequency.setValueAtTime(metallicFilter.frequency.value, now);
-        metallicFilter.frequency.linearRampToValueAtTime(metallicFreq, now + 0.08);
-    }
-
-    if(masterGain && isEngineRunning) {
-        masterGain.gain.cancelScheduledValues(now);
-        masterGain.gain.setValueAtTime(masterGain.gain.value, now);
-        masterGain.gain.linearRampToValueAtTime(1.0, now + 0.05);
+        metallicFilter.frequency.setTargetAtTime(metallicFreq, now, 0.08);
     }
 }
 
-function startEngineSource() {
-    if(!engineBuffer || activeSource) return;
-    const now = audioCtx.currentTime;
+// İPEKSİ YUMUŞAKLIKTA UZUN GEÇİŞLİ DÖNGÜ MİMARİSİ (ULTRA SMOOTH CROSSFADE)
+function startMasterLoop() {
+    if (!isEngineRunning || !engineBuffer) return;
 
-    const source = audioCtx.createBufferSource();
-    source.buffer = engineBuffer;
-    source.loop = true;
+    const duration = engineBuffer.duration;
+    // Geçiş süresini çok daha uzun (1.5 saniye) tutuyoruz ki insan kulağı geçişi asla algılayamasın, sis gibi birbirine karışsın.
+    const transitionTime = 1.5; 
 
-    source.connect(lowpassFilter);
-    source.connect(metallicFilter);
+    function playA() {
+        if (!isEngineRunning) return;
+        const now = audioCtx.currentTime;
+        const currentRate = sourceB ? sourceB.playbackRate.value : 0.75;
 
-    source.start(now);
-    activeSource = source;
+        sourceA = audioCtx.createBufferSource();
+        sourceA.buffer = engineBuffer;
+        sourceA.playbackRate.setValueAtTime(currentRate, now);
 
-    if(masterGain) {
-        masterGain.gain.cancelScheduledValues(now);
-        masterGain.gain.setValueAtTime(0.0, now);
-        masterGain.gain.linearRampToValueAtTime(1.0, now + 0.2);
+        gainA = audioCtx.createGain();
+        gainA.gain.setValueAtTime(0.0, now);
+        // Equal-Power eğrisine yakın yumuşak açılma
+        gainA.gain.linearRampToValueAtTime(1.0, now + transitionTime);
+
+        sourceA.connect(gainA);
+        gainA.connect(lowpassFilter);
+        sourceA.connect(metallicFilter);
+        sourceA.start(now);
+
+        // Dosya bitimine 1.5 saniye kala B kanalını yavaşça araya sokmaya başla
+        const triggerDelay = ((duration / currentRate) - transitionTime) * 1000;
+        
+        loopTimeout = setTimeout(() => {
+            playB();
+            if (gainA) {
+                gainA.gain.cancelScheduledValues(audioCtx.currentTime);
+                gainA.gain.setValueAtTime(gainA.gain.value, audioCtx.currentTime);
+                gainA.gain.linearRampToValueAtTime(0.0, audioCtx.currentTime + transitionTime);
+                setTimeout(() => { try { sourceA.stop(); } catch(e){} }, (transitionTime + 0.2) * 1000);
+            }
+        }, triggerDelay);
     }
+
+    function playB() {
+        if (!isEngineRunning) return;
+        const now = audioCtx.currentTime;
+        const currentRate = sourceA ? sourceA.playbackRate.value : 0.75;
+
+        sourceB = audioCtx.createBufferSource();
+        sourceB.buffer = engineBuffer;
+        sourceB.playbackRate.setValueAtTime(currentRate, now);
+
+        gainB = audioCtx.createGain();
+        gainB.gain.setValueAtTime(0.0, now);
+        gainB.gain.linearRampToValueAtTime(1.0, now + transitionTime);
+
+        sourceB.connect(gainB);
+        gainB.connect(lowpassFilter);
+        sourceB.connect(metallicFilter);
+        sourceB.start(now);
+
+        const triggerDelay = ((duration / currentRate) - transitionTime) * 1000;
+
+        loopTimeout = setTimeout(() => {
+            playA();
+            if (gainB) {
+                gainB.gain.cancelScheduledValues(audioCtx.currentTime);
+                gainB.gain.setValueAtTime(gainB.gain.value, audioCtx.currentTime);
+                gainB.gain.linearRampToValueAtTime(0.0, audioCtx.currentTime + transitionTime);
+                setTimeout(() => { try { sourceB.stop(); } catch(e){} }, (transitionTime + 0.2) * 1000);
+            }
+        }, triggerDelay);
+    }
+
+    playA();
 }
 
 const throttleBar = document.getElementById("throttleBar");
@@ -472,7 +510,7 @@ document.getElementById("actionBtn").onclick = async () => {
     }
 
     isEngineRunning = true;
-    startEngineSource();
+    startMasterLoop();
     
     waveScaleFactor = 0.0;
     const growInterval = setInterval(() => {
@@ -551,13 +589,12 @@ document.getElementById("stopBtn").onclick = () => {
     throttleBar.classList.remove("active");
     throttleLabel.classList.remove("active");
 
-    if(masterGain) {
-        try {
-            masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
-            masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
-            masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
-        } catch(e){}
-    }
+    isEngineRunning = false;
+    if(loopTimeout) clearTimeout(loopTimeout);
+
+    if(gainA) { try { gainA.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3); } catch(e){} }
+    if(gainB) { try { gainB.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3); } catch(e){} }
+    if(metallicGain) { try { metallicGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3); } catch(e){} }
 
     document.getElementById("metricPanel").classList.remove("zoom-in");
     document.getElementById("startPanel").classList.remove("zoom-out");
@@ -572,10 +609,8 @@ document.getElementById("stopBtn").onclick = () => {
     }, 20);
 
     setTimeout(() => {
-        if(activeSource) {
-            try { activeSource.stop(); } catch(e){}
-            activeSource = null;
-        }
+        if(sourceA) { try { sourceA.stop(); } catch(e){} sourceA = null; }
+        if(sourceB) { try { sourceB.stop(); } catch(e){} sourceB = null; }
 
         if(watchId !== null) {
             navigator.geolocation.clearWatch(watchId);
