@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoltSound - True Double-Buffer Edition</title>
+<title>VoltSound - Dynamic Sync Edition</title>
 
 <!-- Google Fonts: Fütüristik / Sci-Fi Tarzı Font (Orbitron) -->
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
@@ -300,7 +300,6 @@ let metallicFilter = null;
 let metallicGain = null;
 let watchId = null;
 
-// ÇİFT BUFFER KUSURSUZ ÇAPRAZ GEÇİŞ DEĞİŞKENLERİ
 let currentSource = null;
 let currentGain = null;
 let loopTimer = null;
@@ -391,25 +390,25 @@ function updateEnginePitch(speed) {
     }
 }
 
-// ÇİFT KAYNAKLI ÖRTÜŞEN ÇAPRAZ GEÇİŞ (TRUE DOUBLE-BUFFER CROSSFADE)
+// HIZ DEĞİŞİMLERİNE ANINDA DİNAMİK UYUM SAĞLAYAN ÇİFT BUFFER MOTORU
 function playDoubleBufferLoop() {
     if (!isEngineRunning || !engineBuffer) return;
+
+    if(loopTimer) clearTimeout(loopTimer);
 
     const now = audioCtx.currentTime;
     const duration = engineBuffer.duration;
     const currentRate = (currentSource && currentSource.playbackRate.value > 0) ? currentSource.playbackRate.value : 0.75;
     
-    // Sesin gerçek çalma süresine göre bitimine 0.6 saniye kala yeni kaynağı bindiriyoruz
-    const crossfadeDuration = 0.6;
+    const crossfadeDuration = 0.4;
     const effectiveDuration = duration / currentRate;
-    const triggerTime = Math.max(0.5, effectiveDuration - crossfadeDuration);
+    const triggerTime = Math.max(0.1, effectiveDuration - crossfadeDuration);
 
     const newSource = audioCtx.createBufferSource();
     newSource.buffer = engineBuffer;
     newSource.playbackRate.setValueAtTime(currentRate, now);
 
     const newGain = audioCtx.createGain();
-    // Yeni ses sıfırdan başlayıp crossfade süresince tam sese (1.0) ulaşır
     newGain.gain.setValueAtTime(0.0, now);
     newGain.gain.linearRampToValueAtTime(1.0, now + crossfadeDuration);
 
@@ -422,7 +421,6 @@ function playDoubleBufferLoop() {
     const oldGain = currentGain;
 
     if (oldGain) {
-        // Eski ses crossfade süresince yavaşça sıfıra inip kapanır
         try {
             oldGain.gain.setValueAtTime(oldGain.gain.value, now);
             oldGain.gain.linearRampToValueAtTime(0.0, now + crossfadeDuration);
@@ -435,7 +433,7 @@ function playDoubleBufferLoop() {
     currentSource = newSource;
     currentGain = newGain;
 
-    // Bir sonraki döngüyü tam zamanında tetikle
+    // Anlık hıza göre bir sonraki tetikleme süresini milisaniye cinsinden yeniden hesapla
     loopTimer = setTimeout(() => {
         playDoubleBufferLoop();
     }, triggerTime * 1000);
@@ -460,9 +458,8 @@ function startEngine() {
     currentSource = source;
     currentGain = gainNode;
 
-    // İlk döngü tetikleyicisini başlat
     const duration = engineBuffer.duration;
-    const triggerTime = (duration - 0.6) / 0.75;
+    const triggerTime = (duration - 0.4) / 0.75;
     loopTimer = setTimeout(() => {
         playDoubleBufferLoop();
     }, triggerTime * 1000);
